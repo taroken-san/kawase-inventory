@@ -6,6 +6,7 @@
 <title>在庫管理</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 #fb-loading { position: fixed; inset: 0; background: rgba(255,255,255,.9); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 15px; color: #555; }
@@ -141,6 +142,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   </div>
   <div class="filter-bar" id="filter-bar"></div>
   <div id="inventory-list"></div>
+  <div style="padding: 12px 0 24px;">
+    <button class="btn btn-primary" onclick="exportExcel()" style="background:#2d6a4f;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      棚卸しExcel出力
+    </button>
+  </div>
 </div>
 
 <div id="screen-orders" class="screen">
@@ -714,6 +721,56 @@ let orders = [];
 let activeOrderStatus = 'all';
 
 function saveOrders() { db.ref('orders').set(orders); }
+
+function exportExcel() {
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
+
+  // シート1: 棚卸し一覧（店舗別）
+  const headers = ['カテゴリ', '商品名', 'メーカー', '定価（円）', ...STORES, '合計', '最低在庫数', 'メモ'];
+  const rows = [...items]
+    .sort((a,b) => {
+      if (a.category !== b.category) return a.category.localeCompare(b.category,'ja');
+      return a.name.localeCompare(b.name,'ja');
+    })
+    .map(item => [
+      item.category,
+      item.name,
+      item.maker || '',
+      item.price || 0,
+      ...STORES.map(s => (item.locations && item.locations[s]) || 0),
+      totalQty(item),
+      item.min || 0,
+      item.memo || ''
+    ]);
+
+  // シート2: 会計事務所向け（カテゴリ・商品名・合計数・単価・金額）
+  const headers2 = ['カテゴリ', '商品名', '合計在庫数', '定価（円）', '在庫金額（円）'];
+  const rows2 = [...items]
+    .sort((a,b) => {
+      if (a.category !== b.category) return a.category.localeCompare(b.category,'ja');
+      return a.name.localeCompare(b.name,'ja');
+    })
+    .map(item => {
+      const qty = totalQty(item);
+      const price = item.price || 0;
+      return [item.category, item.name, qty, price, qty * price];
+    });
+  const totalAmount = rows2.reduce((s, r) => s + r[4], 0);
+  rows2.push(['', '合計', '', '', totalAmount]);
+
+  const wb = XLSX.utils.book_new();
+
+  const ws1 = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws1['!cols'] = [10,30,15,12,...STORES.map(()=>8),8,10,20].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws1, '棚卸し一覧');
+
+  const ws2 = XLSX.utils.aoa_to_sheet([headers2, ...rows2]);
+  ws2['!cols'] = [{wch:12},{wch:32},{wch:12},{wch:12},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws2, '会計事務所向け');
+
+  XLSX.writeFile(wb, `棚卸し_${dateStr}.xlsx`);
+}
 
 function switchTab(name, el) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
