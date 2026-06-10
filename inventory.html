@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>在庫管理</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+#fb-loading { position: fixed; inset: 0; background: rgba(255,255,255,.9); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 15px; color: #555; }
+#fb-loading .spinner { width: 36px; height: 36px; border: 3px solid #e0e0d8; border-top-color: #4a9; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; background: #f5f5f0; color: #1a1a1a; min-height: 100vh; }
+header { background: #fff; border-bottom: 1px solid #e0e0d8; padding: 12px 16px; position: sticky; top: 0; z-index: 100; }
+.header-row { display: flex; align-items: center; gap: 10px; }
+header h1 { font-size: 17px; font-weight: 600; flex: 1; }
+.store-bar { display: flex; gap: 6px; overflow-x: auto; margin-top: 10px; padding-bottom: 2px; scrollbar-width: none; }
+.store-bar::-webkit-scrollbar { display: none; }
+.store-chip { white-space: nowrap; padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #555; }
+.store-chip.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.tab-bar { display: flex; background: #fff; border-bottom: 1px solid #e0e0d8; }
+.tab-bar button { flex: 1; padding: 10px 0; font-size: 13px; font-weight: 500; background: none; border: none; color: #888; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab-bar button.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+.screen { display: none; padding: 14px 16px; }
+.screen.active { display: block; }
+.alert-banner { background: #fff3cd; border: 1px solid #f0c040; border-radius: 8px; padding: 9px 12px; margin-bottom: 12px; font-size: 12px; color: #856404; display: flex; align-items: flex-start; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+.btn-primary { background: #1a1a1a; color: #fff; width: 100%; justify-content: center; margin-bottom: 14px; }
+.btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 6px; }
+.btn-edit { background: #f0f0e8; color: #333; }
+.btn-delete { background: #fff0f0; color: #c0392b; }
+.btn-in { background: #e8f5e9; color: #1b5e20; }
+.btn-out { background: #fff3e0; color: #e65100; }
+.card { background: #fff; border-radius: 10px; border: 1px solid #e0e0d8; margin-bottom: 10px; overflow: hidden; }
+.card-header { padding: 11px 14px 0; display: flex; align-items: center; gap: 8px; }
+.card-header .name { font-size: 14px; font-weight: 600; flex: 1; line-height: 1.3; }
+.card-header .category { font-size: 11px; background: #f0f0e8; color: #555; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.store-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 10px 14px; }
+.store-cell { background: #f8f8f5; border-radius: 6px; padding: 6px 10px; }
+.store-cell.highlight { background: #e8f5e9; }
+.store-cell.zero { opacity: 0.5; }
+.store-name { font-size: 10px; color: #888; margin-bottom: 1px; }
+.store-qty { font-size: 18px; font-weight: 700; }
+.store-qty.low { color: #c0392b; }
+.total-row { display: flex; align-items: center; padding: 6px 14px 10px; border-top: 1px solid #f0f0e8; }
+.total-label { font-size: 12px; color: #888; }
+.total-val { font-size: 15px; font-weight: 700; margin-left: 6px; }
+.card-memo { padding: 0 14px 8px; font-size: 11px; color: #999; }
+.card-actions { padding: 7px 14px 10px; display: flex; gap: 7px; border-top: 1px solid #f0f0e8; flex-wrap: wrap; }
+.empty-state { text-align: center; padding: 40px 24px; color: #888; font-size: 13px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: flex-end; }
+.modal-backdrop.open { display: flex; }
+.modal { background: #fff; border-radius: 20px 20px 0 0; padding: 22px 20px 44px; width: 100%; max-height: 90vh; overflow-y: auto; }
+.modal h2 { font-size: 17px; font-weight: 600; margin-bottom: 16px; }
+label { display: block; font-size: 12px; color: #555; margin-bottom: 4px; margin-top: 12px; }
+input, select, textarea { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; background: #fff; color: #1a1a1a; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a; }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+.btn-cancel { flex: 1; background: #f0f0e8; color: #333; justify-content: center; }
+.btn-save { flex: 2; }
+.loc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 4px; }
+.loc-input-cell { background: #f8f8f5; border-radius: 8px; padding: 8px 10px; }
+.loc-input-cell label { margin: 0 0 4px; font-size: 11px; color: #666; }
+.loc-input-cell input { padding: 6px 8px; font-size: 15px; }
+.history-item { display: flex; align-items: flex-start; padding: 11px 14px; border-bottom: 1px solid #f0f0e8; gap: 10px; }
+.history-item:last-child { border-bottom: none; }
+.hist-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.hist-dot.in { background: #27ae60; }
+.hist-dot.out { background: #e67e22; }
+.hist-info { flex: 1; }
+.hist-name { font-size: 13px; font-weight: 600; }
+.hist-sub { font-size: 11px; color: #888; margin-top: 1px; }
+.hist-qty { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.hist-qty.in { color: #27ae60; }
+.hist-qty.out { color: #e67e22; }
+.search-bar { position: relative; margin-bottom: 12px; }
+.search-bar input { padding-left: 34px; }
+.search-bar svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #888; }
+.filter-bar { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 12px; padding-bottom: 4px; scrollbar-width: none; }
+.filter-bar::-webkit-scrollbar { display: none; }
+.filter-chip { white-space: nowrap; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #555; }
+.filter-chip.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.qty-row { display: flex; align-items: center; gap: 8px; }
+.qty-row .qty-display { font-size: 22px; font-weight: 700; min-width: 50px; text-align: center; }
+.qty-row button { width: 38px; height: 38px; border-radius: 8px; font-size: 20px; border: 1px solid #ddd; background: #f8f8f5; cursor: pointer; }
+.store-select-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 4px; }
+.store-select-btn { padding: 10px; border: 1px solid #ddd; border-radius: 8px; background: #f8f8f5; cursor: pointer; font-size: 13px; font-weight: 500; color: #555; }
+.store-select-btn.selected { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.card-detail { display: none; }
+.card-detail.open { display: block; }
+.badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-left: 4px; }
+.badge-low { background: #fff0f0; color: #c0392b; }
+.badge-lending { background: #e8f0ff; color: #1a4fa0; }
+.btn-lend { background: #e8f0ff; color: #1a4fa0; }
+.btn-return { background: #fdf0ff; color: #7b2fa0; }
+.lending-row { padding: 6px 14px 10px; border-top: 1px solid #f0f0e8; font-size: 12px; color: #555; }
+.lending-active { background: #f0f6ff; border-radius: 6px; padding: 5px 10px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.lending-active .ret-btn { margin-left: auto; background: none; border: 1px solid #aab; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; color: #555; }
+.order-card { background: #fff; border-radius: 10px; border: 1px solid #e0e0d8; margin-bottom: 10px; overflow: hidden; }
+.order-header { padding: 11px 14px 8px; display: flex; align-items: flex-start; gap: 8px; }
+.order-header .oname { font-size: 14px; font-weight: 600; flex: 1; line-height: 1.3; }
+.status-pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+.s-依頼受付 { background: #fff3cd; color: #856404; }
+.s-発注済み { background: #dce8ff; color: #1a4fa0; }
+.s-入荷済み { background: #e8f5e9; color: #1b5e20; }
+.s-渡し済み { background: #f0f0f0; color: #888; }
+.order-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 14px 8px; }
+.order-meta-cell { font-size: 12px; }
+.order-meta-cell span { display: block; font-size: 10px; color: #aaa; margin-bottom: 1px; }
+.order-actions { padding: 7px 14px 10px; display: flex; gap: 7px; border-top: 1px solid #f0f0e8; flex-wrap: wrap; }
+.btn-next { background: #1a1a1a; color: #fff; }
+.btn-order-del { background: #fff0f0; color: #c0392b; }
+.progress-bar { height: 3px; background: #f0f0e8; margin: 0 14px 10px; border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: #27ae60; transition: width 0.3s; }
+</style>
+</head>
+<body>
+<div id="fb-loading"><div class="spinner"></div>データを読み込み中...</div>
+
+<header>
+  <div class="header-row">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    <h1>在庫管理</h1>
+    <button onclick="openAddModal()" style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;">+ 追加</button>
+  </div>
+  <div class="store-bar" id="store-bar"></div>
+</header>
+
+<div class="tab-bar">
+  <button class="active" onclick="switchTab('inventory', this)">在庫一覧</button>
+  <button onclick="switchTab('orders', this)">発注管理</button>
+  <button onclick="switchTab('history', this)">入出庫履歴</button>
+</div>
+
+<div id="screen-inventory" class="screen active">
+  <div id="alert-box"></div>
+  <div class="search-bar">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="search-input" placeholder="商品名・カテゴリで検索" oninput="renderInventory()">
+  </div>
+  <div class="filter-bar" id="filter-bar"></div>
+  <div id="inventory-list"></div>
+</div>
+
+<div id="screen-orders" class="screen">
+  <button class="btn btn-primary" onclick="openOrderModal()">+ 発注依頼を追加</button>
+  <div class="filter-bar" id="order-filter-bar"></div>
+  <div id="order-list"></div>
+</div>
+
+<div id="screen-history" class="screen">
+  <div class="card"><div id="history-list"></div></div>
+</div>
+
+<!-- 追加・編集モーダル -->
+<div class="modal-backdrop" id="modal-add" onclick="closeModal('modal-add')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2 id="modal-title">アイテム追加</h2>
+    <input type="hidden" id="edit-id">
+    <label>名前 *</label>
+    <input type="text" id="item-name" placeholder="例：Famous FS-1G">
+    <label>カテゴリ</label>
+    <select id="item-category">
+      <option>ウクレレ</option><option>三線</option><option>弦</option>
+      <option>チューナー</option><option>ケース</option><option>アクセサリー</option><option>備品(消耗品)</option><option>その他</option>
+    </select>
+    <label>メーカー</label>
+    <input type="text" id="item-maker" placeholder="例：キワヤ商会">
+    <label>定価（税込）</label>
+    <input type="number" id="item-price" value="" min="0" placeholder="例：25300">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+      <input type="checkbox" id="item-lending" style="width:18px;height:18px;margin:0;">
+      <span>貸出用（非売品）</span>
+    </label>
+    <label>最低在庫数（アラート基準）</label>
+    <input type="number" id="item-min" value="1" min="0">
+    <label>各店舗の在庫数</label>
+    <div class="loc-grid" id="loc-inputs"></div>
+    <label>商品ページURL</label>
+    <input type="url" id="item-url" placeholder="https://...">
+    <label>メモ</label>
+    <textarea id="item-memo" rows="2" placeholder="任意のメモ"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('modal-add')">キャンセル</button>
+      <button class="btn btn-primary btn-save" onclick="saveItem()" style="margin-bottom:0">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 発注モーダル -->
+<div class="modal-backdrop" id="modal-order" onclick="closeModal('modal-order')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2 id="order-modal-title">発注依頼を追加</h2>
+    <input type="hidden" id="order-edit-id">
+    <label>商品リスト *</label>
+    <div id="order-items-list"></div>
+    <button onclick="addOrderItemRow()" style="width:100%;padding:8px;border:1px dashed #ccc;border-radius:8px;background:none;color:#555;font-size:13px;cursor:pointer;margin-top:6px;">+ 商品を追加</button>
+    <label style="margin-top:16px">依頼した講師</label>
+    <input type="text" id="order-instructor" placeholder="例：田中先生">
+    <label>教室名</label>
+    <input type="text" id="order-classroom" placeholder="例：横浜教室">
+    <label>生徒名</label>
+    <input type="text" id="order-student" placeholder="例：山田 花子">
+    <label>受け取り店舗（入荷時に在庫へ反映）</label>
+    <select id="order-store">
+      <option>横浜</option><option>阪東橋</option><option>町田</option><option>平塚</option>
+      <option>上大岡</option><option>木曽</option><option>青葉台</option><option>長津田</option><option>茅ヶ崎</option><option>藤沢</option>
+    </select>
+    <label>受け渡し希望日</label>
+    <input type="date" id="order-expected">
+    <label>メモ</label>
+    <textarea id="order-memo" rows="2" placeholder="例：メーカーに在庫確認中"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('modal-order')">キャンセル</button>
+      <button class="btn btn-primary btn-save" onclick="saveOrder()" style="margin-bottom:0">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 貸出モーダル -->
+<div class="modal-backdrop" id="modal-lend" onclick="closeModal('modal-lend')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>貸し出し記録</h2>
+    <input type="hidden" id="lend-item-id">
+    <label>教室</label>
+    <select id="lend-store"></select>
+    <label>借りた人 *</label>
+    <input type="text" id="lend-borrower" placeholder="例：田中 花子">
+    <label>台数</label>
+    <div class="qty-row">
+      <button onclick="adjustLendQty(-1)">−</button>
+      <div class="qty-display" id="lend-qty-display">1</div>
+      <button onclick="adjustLendQty(1)">＋</button>
+      <input type="number" id="lend-qty" value="1" min="1" style="display:none">
+    </div>
+    <p id="lend-stock-info" style="font-size:12px;color:#888;margin-top:6px;"></p>
+    <label>メモ</label>
+    <textarea id="lend-memo" rows="2" placeholder="例：発表会用"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('modal-lend')">キャンセル</button>
+      <button class="btn btn-primary btn-save" onclick="saveLend()" style="margin-bottom:0">貸し出す</button>
+    </div>
+  </div>
+</div>
+
+<!-- 入出庫モーダル -->
+<div class="modal-backdrop" id="modal-move" onclick="closeModal('modal-move')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2 id="move-title">入庫</h2>
+    <input type="hidden" id="move-id">
+    <input type="hidden" id="move-type">
+    <label>店舗</label>
+    <div class="store-select-grid" id="move-store-grid"></div>
+    <label style="margin-top:14px">数量</label>
+    <div class="qty-row">
+      <button onclick="adjustMoveQty(-1)">−</button>
+      <div class="qty-display" id="move-qty-display">1</div>
+      <button onclick="adjustMoveQty(1)">＋</button>
+      <input type="number" id="move-qty" value="1" min="1" style="display:none">
+    </div>
+    <p id="move-stock-info" style="font-size:12px;color:#888;margin-top:6px;"></p>
+    <label>メモ（任意）</label>
+    <textarea id="move-memo" rows="2" placeholder="例：ライブで使用"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('modal-move')">キャンセル</button>
+      <button class="btn btn-primary btn-save" id="move-save-btn" onclick="saveMove()" style="margin-bottom:0">確定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Firebase初期化
+const firebaseConfig = {
+  apiKey: "AIzaSyBpOFWPyEZi0FnjZYKD-fdOVljB05sayKg",
+  authDomain: "kawase-inventory.firebaseapp.com",
+  databaseURL: "https://kawase-inventory-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kawase-inventory",
+  storageBucket: "kawase-inventory.firebasestorage.app",
+  messagingSenderId: "466346060672",
+  appId: "1:466346060672:web:9a75973d53bc6a30946f65"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const STORES = ['横浜', '阪東橋', '町田', '平塚', '上大岡', '木曽', '青葉台', '長津田', '茅ヶ崎', '藤沢'];
+
+const SEED = [{"id":"1","_v":3,"name":"Famous / FS-1G（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":25300,"memo":"FS-1G","min":1,"locations":{"横浜":1,"阪東橋":1,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"2","_v":3,"name":"Famous / FS-5G（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":38500,"memo":"FS-5G","min":1,"locations":{"横浜":1,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"3","_v":3,"name":"Famous / FS-200（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":57420,"memo":"FS-200","min":1,"locations":{"横浜":1,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"4","_v":3,"name":"KoAloha / KSO-10（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":31900,"memo":"KSO-10","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"5","_v":3,"name":"KIWAYA / KSU-1（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":11000,"memo":"KSU-1","min":1,"locations":{"横浜":2,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"6","_v":3,"name":"KIWAYA / KSU-1L（ソプラノロングウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":14300,"memo":"KSU-1L","min":1,"locations":{"横浜":1,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"7","_v":3,"name":"PONO / AS-K（ソプラノウクレレ アカシア材）","category":"ウクレレ","maker":"日本娯楽","price":84700,"memo":"AS-K","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"8","_v":3,"name":"PONO / MGS-K（ソプラノウクレレ マンゴー材）","category":"ウクレレ","maker":"日本娯楽","price":108000,"memo":"MGS-K","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"9","_v":3,"name":"aNueNue / aNN-U1（ソプラノウクレレ）","category":"ウクレレ","maker":"日本娯楽","price":92400,"memo":"aNN-U1","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"10","_v":3,"name":"aNueNue / aNN-S3（ソプラノウクレレ）","category":"ウクレレ","maker":"日本娯楽","price":0,"memo":"aNN-S3","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"11","_v":3,"name":"aNueNue / aNN-S4（ソプラノウクレレ）","category":"ウクレレ","maker":"日本娯楽","price":0,"memo":"aNN-S4","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"12","_v":3,"name":"Pupukea / UF-30（ソプラノウクレレ）","category":"ウクレレ","maker":"フジゲン","price":45500,"memo":"UF-30","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"13","_v":3,"name":"FGN Standard / FUS-TS（ソプラノウクレレ）","category":"ウクレレ","maker":"フジゲン","price":52000,"memo":"FUS-TS","min":1,"locations":{"横浜":1,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"14","_v":3,"name":"FGN Standard / FUS-TC（コンサートウクレレ）","category":"ウクレレ","maker":"フジゲン","price":52000,"memo":"FUS-TC","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"15","_v":3,"name":"ORCAS / OT-630（クリップチューナー）","category":"チューナー","maker":"日本娯楽","price":0,"memo":"OT-630","min":1,"locations":{"横浜":0,"阪東橋":2,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"16","_v":3,"name":"ORCAS / OS-LOW-G/W（Low-G巻弦 4弦のみ）","category":"弦","maker":"日本娯楽","price":330,"memo":"OS-LOW-G/W","min":3,"locations":{"横浜":5,"阪東橋":5,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"17","_v":3,"name":"ORCAS（コード付きクロス）","category":"アクセサリー","maker":"日本娯楽","price":0,"memo":"","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"18","_v":3,"name":"KIWAYA / KWLGセット（Low-G巻弦 4本セット）","category":"弦","maker":"キワヤ商会","price":0,"memo":"KWLGセット","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"19","_v":3,"name":"KIWAYA / KFC-LG（Low-Gナイロン弦 4本セット）","category":"弦","maker":"キワヤ商会","price":0,"memo":"KFC-LG","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"20","_v":3,"name":"KIWAYA / ５-S（ソプラノ用ソフトケース）","category":"ケース","maker":"キワヤ商会","price":2200,"memo":"５-S","min":1,"locations":{"横浜":2,"阪東橋":2,"町田":2,"平塚":2,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"21","_v":3,"name":"KIWAYA / No.30（ソプラノ用ソフトケース 3色）","category":"ケース","maker":"キワヤ商会","price":3300,"memo":"No.30","min":1,"locations":{"横浜":2,"阪東橋":0,"町田":1,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"22","_v":3,"name":"famous / UT-301（クリップチューナー）","category":"チューナー","maker":"キワヤ商会","price":2700,"memo":"UTー301","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"23","_v":3,"name":"KIWAYA（楽器用クロス）","category":"アクセサリー","maker":"キワヤ商会","price":500,"memo":"","min":3,"locations":{"横浜":10,"阪東橋":1,"町田":8,"平塚":2,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"24","_v":3,"name":"KIWAYA / ノンスリップ（滑り止めラバー）","category":"アクセサリー","maker":"キワヤ商会","price":1000,"memo":"ノンスリップラバー","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":4,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"25","_v":3,"name":"KIWAYA（壁掛けウクレレホルダー）","category":"アクセサリー","maker":"キワヤ商会","price":1100,"memo":"","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"26","_v":3,"name":"famous（コードスタンプ）","category":"アクセサリー","maker":"キワヤ商会","price":1600,"memo":"","min":1,"locations":{"横浜":0,"阪東橋":2,"町田":0,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"27","_v":3,"name":"famous（カポタスト）","category":"アクセサリー","maker":"キワヤ商会","price":0,"memo":"","min":1,"locations":{"横浜":2,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"28","_v":3,"name":"famous / UH-425（スタンド型ウクレレホルダー）","category":"アクセサリー","maker":"キワヤ商会","price":1100,"memo":"UH-425","min":1,"locations":{"横浜":1,"阪東橋":1,"町田":2,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"29","_v":3,"name":"famous（ウクレレ用ピック）","category":"アクセサリー","maker":"キワヤ商会","price":400,"memo":"","min":1,"locations":{"横浜":0,"阪東橋":0,"町田":2,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"30","_v":3,"name":"famous（エンドピン）","category":"アクセサリー","maker":"キワヤ商会","price":1100,"memo":"","min":1,"locations":{"横浜":2,"阪東橋":0,"町田":0,"平塚":4,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"31","_v":3,"name":"CR2032（ボタン電池 チューナー用）","category":"アクセサリー","maker":"キワヤ商会","price":200,"memo":"CR2032","min":2,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"32","_v":3,"name":"famous（ヘッドストラップ）","category":"アクセサリー","maker":"キワヤ商会","price":0,"memo":"","min":1,"locations":{"横浜":0,"阪東橋":1,"町田":2,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}},{"id":"33","_v":3,"name":"ASOVIVA（三線 人工皮）","category":"三線","maker":"ASOVIVA","price":0,"memo":"","min":1,"locations":{"横浜":1,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0}}];
+
+let items = [];
+let history = [];
+let activeStore = 'all';
+let activeCat = 'all';
+let moveSelectedStore = STORES[0];
+
+function save() {
+  db.ref('items').set(items);
+  db.ref('history').set(history);
+}
+
+function totalQty(item) {
+  return STORES.reduce((s, st) => s + (item.locations[st] || 0), 0);
+}
+function storeQty(item, store) {
+  return item.locations[store] || 0;
+}
+function isLow(item) {
+  const qty = activeStore === 'all' ? totalQty(item) : storeQty(item, activeStore);
+  return qty <= item.min;
+}
+
+function renderStoreBar() {
+  const bar = document.getElementById('store-bar');
+  bar.innerHTML = ['all', ...STORES].map(s => {
+    const label = s === 'all' ? 'すべての店舗' : s;
+    return `<div class="store-chip ${activeStore === s ? 'active' : ''}" onclick="setStore('${s}')">${label}</div>`;
+  }).join('');
+}
+
+function setStore(s) {
+  activeStore = s;
+  renderStoreBar();
+  renderInventory();
+}
+
+function renderInventory() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const filtered = items.filter(i => {
+    const matchQ = !q || i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q);
+    const matchCat = activeCat === 'all' || i.category === activeCat;
+    const matchStore = activeStore === 'all' || storeQty(i, activeStore) > 0 || true;
+    return matchQ && matchCat;
+  });
+
+  const cats = [...new Set(items.map(i => i.category))];
+  const filterBar = document.getElementById('filter-bar');
+  filterBar.innerHTML = ['all', ...cats].map(c => {
+    const label = c === 'all' ? 'すべて' : c;
+    return `<div class="filter-chip ${activeCat === c ? 'active' : ''}" onclick="setCat('${c}')">${label}</div>`;
+  }).join('');
+
+  const lowItems = items.filter(i => isLow(i));
+  const alertBox = document.getElementById('alert-box');
+  if (lowItems.length) {
+    alertBox.innerHTML = `<div class="alert-banner"><span style="flex-shrink:0">⚠️</span><span>在庫不足: ${lowItems.map(i => i.name).join('、')}</span></div>`;
+  } else {
+    alertBox.innerHTML = '';
+  }
+
+  const list = document.getElementById('inventory-list');
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state">アイテムがありません</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(item => {
+    const low = isLow(item);
+    const total = totalQty(item);
+    const storeCells = activeStore === 'all'
+      ? STORES.map(s => {
+          const qty = storeQty(item, s);
+          return `<div class="store-cell ${qty === 0 ? 'zero' : ''}">
+            <div class="store-name">${s}</div>
+            <div class="store-qty ${low && qty <= item.min ? 'low' : ''}">${qty}</div>
+          </div>`;
+        }).join('')
+      : `<div class="store-cell highlight">
+          <div class="store-name">${activeStore}</div>
+          <div class="store-qty ${low ? 'low' : ''}">${storeQty(item, activeStore)}</div>
+        </div>`;
+
+    const metaText = [item.maker, item.price ? '¥' + Number(item.price).toLocaleString() : '', item.memo].filter(Boolean).map(escHtml).join(' · ');
+    return `<div class="card">
+      <div class="card-header" onclick="toggleCard('${item.id}')" style="cursor:pointer;padding-bottom:10px;">
+        <div class="name">${item.url ? `<a href="${escHtml(item.url)}" target="_blank" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline;text-decoration-color:#bbb;">${escHtml(item.name)}</a>` : escHtml(item.name)}${low ? '<span class="badge badge-low">不足</span>' : ''}</div>
+        <span style="font-size:13px;font-weight:700;margin-right:6px;white-space:nowrap">${activeStore === 'all' ? total + '個' : storeQty(item, activeStore) + '個'}</span>
+        ${item.isLending ? '<span class="badge badge-lending">貸出用</span>' : ''}
+        <div class="category">${escHtml(item.category)}</div>
+        <span class="card-chevron" id="chev-${item.id}" style="font-size:12px;color:#aaa;margin-left:4px;transition:transform 0.2s;">▼</span>
+      </div>
+      <div class="card-detail" id="detail-${item.id}">
+        <div class="store-grid">${storeCells}</div>
+        ${activeStore === 'all' ? `<div class="total-row"><span class="total-label">合計</span><span class="total-val">${total}個</span><span style="font-size:11px;color:#aaa;margin-left:6px">最低在庫:${item.min}個</span></div>` : ''}
+        ${metaText ? `<div class="card-memo">${metaText}</div>` : ''}
+        ${item.isLending ? activeLendsHtml(item.id) : ''}
+        <div class="card-actions">
+          ${item.isLending
+            ? `<button class="btn btn-sm btn-lend" onclick="openLendModal('${item.id}')">貸し出す</button>`
+            : `<button class="btn btn-sm btn-in" onclick="openMoveModal('${item.id}','in')">入庫</button>
+               <button class="btn btn-sm btn-out" onclick="openMoveModal('${item.id}','out')">出庫</button>`}
+          <button class="btn btn-sm btn-edit" onclick="openEditModal('${item.id}')">編集</button>
+          <button class="btn btn-sm btn-delete" onclick="deleteItem('${item.id}')">削除</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setCat(c) {
+  activeCat = c;
+  renderInventory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!history.length) {
+    list.innerHTML = '<div class="empty-state">履歴がありません</div>';
+    return;
+  }
+  list.innerHTML = [...history].reverse().map(h => {
+    const sign = h.type === 'in' ? '+' : '−';
+    const d = new Date(h.ts);
+    const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `<div class="history-item">
+      <div class="hist-dot ${h.type}"></div>
+      <div class="hist-info">
+        <div class="hist-name">${escHtml(h.name)}</div>
+        <div class="hist-sub">${dateStr} · ${h.store}${h.memo ? ' · ' + escHtml(h.memo) : ''}</div>
+      </div>
+      <div class="hist-qty ${h.type}">${sign}${h.qty}</div>
+    </div>`;
+  }).join('');
+}
+
+function buildLocInputs(item) {
+  return STORES.map(s => {
+    const val = item ? (item.locations[s] || 0) : 0;
+    return `<div class="loc-input-cell">
+      <label>${s}</label>
+      <input type="number" id="loc-${s}" value="${val}" min="0">
+    </div>`;
+  }).join('');
+}
+
+function openAddModal() {
+  document.getElementById('modal-title').textContent = 'アイテム追加';
+  document.getElementById('edit-id').value = '';
+  document.getElementById('item-name').value = '';
+  document.getElementById('item-category').value = 'ウクレレ';
+  document.getElementById('item-maker').value = '';
+  document.getElementById('item-price').value = '';
+  document.getElementById('item-url').value = '';
+  document.getElementById('item-lending').checked = false;
+  document.getElementById('item-min').value = 1;
+  document.getElementById('item-memo').value = '';
+  document.getElementById('loc-inputs').innerHTML = buildLocInputs(null);
+  openModal('modal-add');
+}
+
+function openEditModal(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  document.getElementById('modal-title').textContent = 'アイテム編集';
+  document.getElementById('edit-id').value = id;
+  document.getElementById('item-name').value = item.name;
+  document.getElementById('item-category').value = item.category;
+  document.getElementById('item-maker').value = item.maker || '';
+  document.getElementById('item-price').value = item.price || '';
+  document.getElementById('item-url').value = item.url || '';
+  document.getElementById('item-lending').checked = !!item.isLending;
+  document.getElementById('item-min').value = item.min;
+  document.getElementById('item-memo').value = item.memo || '';
+  document.getElementById('loc-inputs').innerHTML = buildLocInputs(item);
+  openModal('modal-add');
+}
+
+function saveItem() {
+  const name = document.getElementById('item-name').value.trim();
+  if (!name) { alert('名前を入力してください'); return; }
+  const locs = {};
+  STORES.forEach(s => { locs[s] = parseInt(document.getElementById('loc-' + s).value) || 0; });
+  const id = document.getElementById('edit-id').value;
+  const obj = {
+    name,
+    category: document.getElementById('item-category').value,
+    maker: document.getElementById('item-maker').value.trim(),
+    price: parseInt(document.getElementById('item-price').value) || 0,
+    url: document.getElementById('item-url').value.trim(),
+    isLending: document.getElementById('item-lending').checked,
+    min: parseInt(document.getElementById('item-min').value) || 0,
+    memo: document.getElementById('item-memo').value.trim(),
+    locations: locs
+  };
+  if (id) {
+    const idx = items.findIndex(i => i.id === id);
+    items[idx] = { ...items[idx], ...obj };
+  } else {
+    obj.id = Date.now().toString();
+    items.push(obj);
+  }
+  save();
+  closeModal('modal-add');
+  renderInventory();
+}
+
+function deleteItem(id) {
+  if (!confirm('削除しますか？')) return;
+  items = items.filter(i => i.id !== id);
+  save();
+  renderInventory();
+}
+
+function openMoveModal(id, type) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  document.getElementById('move-id').value = id;
+  document.getElementById('move-type').value = type;
+  document.getElementById('move-title').textContent = type === 'in' ? '入庫' : '出庫';
+  document.getElementById('move-qty').value = 1;
+  document.getElementById('move-qty-display').textContent = 1;
+  document.getElementById('move-memo').value = '';
+
+  moveSelectedStore = activeStore !== 'all' ? activeStore : STORES[0];
+  renderMoveStoreGrid(item);
+  updateMoveStockInfo(item);
+  document.getElementById('move-save-btn').textContent = type === 'in' ? '入庫する' : '出庫する';
+  openModal('modal-move');
+}
+
+function renderMoveStoreGrid(item) {
+  if (!item) {
+    const id = document.getElementById('move-id').value;
+    item = items.find(i => i.id === id);
+  }
+  document.getElementById('move-store-grid').innerHTML = STORES.map(s => {
+    const qty = storeQty(item, s);
+    return `<button class="store-select-btn ${moveSelectedStore === s ? 'selected' : ''}" onclick="selectMoveStore('${s}')">${s}<br><span style="font-size:11px;opacity:0.7">現在 ${qty}個</span></button>`;
+  }).join('');
+}
+
+function selectMoveStore(s) {
+  moveSelectedStore = s;
+  const id = document.getElementById('move-id').value;
+  const item = items.find(i => i.id === id);
+  renderMoveStoreGrid(item);
+  updateMoveStockInfo(item);
+}
+
+function updateMoveStockInfo(item) {
+  const info = document.getElementById('move-stock-info');
+  if (item) {
+    info.textContent = `${moveSelectedStore}の現在在庫: ${storeQty(item, moveSelectedStore)}個`;
+  }
+}
+
+function saveMove() {
+  const id = document.getElementById('move-id').value;
+  const type = document.getElementById('move-type').value;
+  const qty = parseInt(document.getElementById('move-qty').value) || 0;
+  if (qty <= 0) { alert('数量を入力してください'); return; }
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  if (type === 'out' && storeQty(item, moveSelectedStore) < qty) {
+    alert(`${moveSelectedStore}の在庫が足りません（現在: ${storeQty(item, moveSelectedStore)}個）`);
+    return;
+  }
+  if (type === 'in') {
+    item.locations[moveSelectedStore] = (item.locations[moveSelectedStore] || 0) + qty;
+  } else {
+    item.locations[moveSelectedStore] = (item.locations[moveSelectedStore] || 0) - qty;
+  }
+  history.push({ id, name: item.name, type, qty, store: moveSelectedStore, memo: document.getElementById('move-memo').value.trim(), ts: Date.now() });
+  save();
+  closeModal('modal-move');
+  renderInventory();
+}
+
+function adjustMoveQty(delta) {
+  const input = document.getElementById('move-qty');
+  const val = Math.max(1, (parseInt(input.value) || 1) + delta);
+  input.value = val;
+  document.getElementById('move-qty-display').textContent = val;
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- 貸出管理 ----
+let lendingLogs = [];
+function saveLending() { db.ref('lending').set(lendingLogs); }
+
+function activeLends(itemId) {
+  return lendingLogs.filter(l => l.itemId === itemId && !l.returnedAt);
+}
+
+function activeLendsHtml(itemId) {
+  const logs = activeLends(itemId);
+  if (!logs.length) return '';
+  const rows = logs.map(l => {
+    const d = new Date(l.lentAt);
+    const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+    return `<div class="lending-active">
+      <span>${escHtml(l.store)} · ${escHtml(l.borrower)}${l.qty > 1 ? ' ×' + l.qty : ''}</span>
+      <span style="font-size:11px;color:#aaa;margin-left:4px">${dateStr}</span>
+      <button class="ret-btn" onclick="returnLend('${l.id}');event.stopPropagation()">返却</button>
+    </div>`;
+  }).join('');
+  return `<div class="lending-row"><div style="font-size:11px;color:#888;margin-bottom:4px">貸出中 ${logs.length}件</div>${rows}</div>`;
+}
+
+function openLendModal(itemId) {
+  const item = items.find(i => i.id === itemId);
+  if (!item) return;
+  document.getElementById('lend-item-id').value = itemId;
+  const sel = document.getElementById('lend-store');
+  sel.innerHTML = STORES.map(s => `<option value="${s}">${s}（在庫${storeQty(item,s)}台）</option>`).join('');
+  sel.value = activeStore !== 'all' ? activeStore : STORES[0];
+  document.getElementById('lend-borrower').value = '';
+  document.getElementById('lend-qty').value = 1;
+  document.getElementById('lend-qty-display').textContent = 1;
+  document.getElementById('lend-memo').value = '';
+  updateLendStockInfo(item, sel.value);
+  sel.onchange = () => updateLendStockInfo(item, sel.value);
+  openModal('modal-lend');
+}
+
+function updateLendStockInfo(item, store) {
+  document.getElementById('lend-stock-info').textContent = `${store}の在庫: ${storeQty(item, store)}台`;
+}
+
+function adjustLendQty(delta) {
+  const input = document.getElementById('lend-qty');
+  const val = Math.max(1, (parseInt(input.value) || 1) + delta);
+  input.value = val;
+  document.getElementById('lend-qty-display').textContent = val;
+}
+
+function saveLend() {
+  const itemId = document.getElementById('lend-item-id').value;
+  const borrower = document.getElementById('lend-borrower').value.trim();
+  if (!borrower) { alert('借りた人を入力してください'); return; }
+  const store = document.getElementById('lend-store').value;
+  const qty = parseInt(document.getElementById('lend-qty').value) || 1;
+  const item = items.find(i => i.id === itemId);
+  if (storeQty(item, store) < qty) { alert(`${store}の在庫が足りません（現在: ${storeQty(item, store)}台）`); return; }
+  item.locations[store] = (item.locations[store] || 0) - qty;
+  lendingLogs.push({ id: Date.now().toString(), itemId, itemName: item.name, store, borrower, qty, memo: document.getElementById('lend-memo').value.trim(), lentAt: Date.now(), returnedAt: null });
+  save(); saveLending();
+  closeModal('modal-lend');
+  renderInventory();
+}
+
+function returnLend(logId) {
+  const log = lendingLogs.find(l => l.id === logId);
+  if (!log) return;
+  if (!confirm(`${log.borrower}さんから返却しますか？`)) return;
+  const item = items.find(i => i.id === log.itemId);
+  if (item) item.locations[log.store] = (item.locations[log.store] || 0) + log.qty;
+  log.returnedAt = Date.now();
+  save(); saveLending();
+  renderInventory();
+}
+
+function toggleCard(id) {
+  const detail = document.getElementById('detail-' + id);
+  const chev = document.getElementById('chev-' + id);
+  const open = detail.classList.toggle('open');
+  chev.style.transform = open ? 'rotate(180deg)' : '';
+}
+
+// Firebase から初期データを読み込み、リアルタイム同期を開始
+function showLoading(show) {
+  document.getElementById('fb-loading').style.display = show ? 'flex' : 'none';
+}
+
+db.ref('/').once('value').then(snap => {
+  const data = snap.val() || {};
+
+  items = data.items || [];
+  if (!items.length || !items[0].locations || items[0]._v !== 3) {
+    items = SEED;
+    db.ref('items').set(items);
+  }
+  history = data.history || [];
+  lendingLogs = data.lending || [];
+  orders = data.orders || [];
+
+  showLoading(false);
+  renderStoreBar();
+  renderInventory();
+  renderOrders();
+
+  // リアルタイム同期（他端末の変更を受け取る）
+  db.ref('items').on('value', snap => {
+    const val = snap.val();
+    if (val) { items = val; renderInventory(); }
+  });
+  db.ref('history').on('value', snap => { const v = snap.val(); if (v) history = v; });
+  db.ref('lending').on('value', snap => { const v = snap.val(); if (v) { lendingLogs = v; renderInventory(); } });
+  db.ref('orders').on('value', snap => { const v = snap.val(); if (v) { orders = v; renderOrders(); } });
+}).catch(err => {
+  console.error('Firebase接続エラー:', err);
+  showLoading(false);
+});
+
+// ---- 発注管理 ----
+const ORDER_STATUSES = ['依頼受付', '発注済み', '入荷済み', '渡し済み'];
+let orders = [];
+let activeOrderStatus = 'all';
+
+function saveOrders() { db.ref('orders').set(orders); }
+
+function switchTab(name, el) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  el.classList.add('active');
+  if (name === 'history') renderHistory();
+  if (name === 'orders') renderOrders();
+  const addBtn = document.querySelector('header button');
+  addBtn.style.display = name === 'inventory' ? '' : 'none';
+}
+
+function renderOrders() {
+  const filtered = activeOrderStatus === 'all'
+    ? orders
+    : orders.filter(o => o.status === activeOrderStatus);
+
+  const bar = document.getElementById('order-filter-bar');
+  const counts = {};
+  ORDER_STATUSES.forEach(s => { counts[s] = orders.filter(o => o.status === s).length; });
+  bar.innerHTML = [['all', 'すべて'], ...ORDER_STATUSES.map(s => [s, s])].map(([val, label]) => {
+    const cnt = val === 'all' ? orders.length : counts[val];
+    return `<div class="filter-chip ${activeOrderStatus === val ? 'active' : ''}" onclick="setOrderStatus('${val}')">${label}${cnt > 0 ? ' ' + cnt : ''}</div>`;
+  }).join('');
+
+  const list = document.getElementById('order-list');
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state">発注依頼がありません</div>`;
+    return;
+  }
+
+  const progressPct = { '依頼受付': 25, '発注済み': 50, '入荷済み': 75, '渡し済み': 100 };
+  list.innerHTML = [...filtered].reverse().map(o => {
+    const nextLabel = { '依頼受付': '発注済みへ', '発注済み': '入荷済みへ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status];
+    const idx = ORDER_STATUSES.indexOf(o.status);
+    const d = new Date(o.createdAt);
+    const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+    const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
+    const itemsHtml = orderItems.map(i =>
+      `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f5f5f0;font-size:13px;">
+        <span>${escHtml(i.name)}</span><span style="font-weight:600;white-space:nowrap;margin-left:8px">${i.qty}個</span>
+      </div>`
+    ).join('');
+    return `<div class="order-card">
+      <div class="order-header">
+        <div class="oname">${o.student ? escHtml(o.student) : (o.instructor ? escHtml(o.instructor) : '依頼')}
+          ${o.classroom ? `<span style="font-size:11px;font-weight:400;color:#888;margin-left:4px">${escHtml(o.classroom)}</span>` : ''}
+        </div>
+        <div class="status-pill s-${o.status}">${o.status}</div>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${progressPct[o.status]}%"></div></div>
+      <div style="padding:0 14px 8px">${itemsHtml}</div>
+      <div class="order-meta">
+        ${o.instructor ? `<div class="order-meta-cell"><span>講師</span>${escHtml(o.instructor)}</div>` : ''}
+        ${o.classroom ? `<div class="order-meta-cell"><span>教室</span>${escHtml(o.classroom)}</div>` : ''}
+        ${o.student ? `<div class="order-meta-cell"><span>生徒</span>${escHtml(o.student)}</div>` : ''}
+        <div class="order-meta-cell"><span>登録日</span>${dateStr}</div>
+        ${o.expectedDate ? `<div class="order-meta-cell"><span>受け渡し希望日</span>${o.expectedDate}</div>` : ''}
+      </div>
+      ${o.memo ? `<div class="card-memo" style="padding:0 14px 8px">${escHtml(o.memo)}</div>` : ''}
+      <div class="order-actions">
+        ${nextLabel ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
+        ${idx > 0 ? `<button class="btn btn-sm btn-edit" onclick="revertOrder('${o.id}')">← 戻す</button>` : ''}
+        <button class="btn btn-sm btn-edit" onclick="openOrderModal('${o.id}')">編集</button>
+        <button class="btn btn-sm btn-order-del" onclick="deleteOrder('${o.id}')">削除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setOrderStatus(s) { activeOrderStatus = s; renderOrders(); }
+
+function advanceOrder(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const idx = ORDER_STATUSES.indexOf(o.status);
+  if (idx < 0 || idx >= ORDER_STATUSES.length - 1) return;
+  const next = ORDER_STATUSES[idx + 1];
+
+  if (next === '入荷済み') {
+    const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
+    const store = o.store || '不明';
+    let msgs = [];
+    orderItems.forEach(oi => {
+      const item = items.find(i => i.name === oi.name);
+      if (item) {
+        item.locations[store] = (item.locations[store] || 0) + oi.qty;
+        history.push({ id: item.id, name: item.name, type: 'in', qty: oi.qty, store, memo: '発注入荷', ts: Date.now() });
+        msgs.push(`${oi.name} ×${oi.qty}`);
+      }
+    });
+    if (msgs.length) { save(); alert(`${store}に入庫しました:\n${msgs.join('\n')}`); }
+    else { if (!confirm('在庫リストに一致する商品が見つかりません。そのままステータスを進めますか？')) return; }
+  }
+
+  o.status = next;
+  saveOrders();
+  renderOrders();
+}
+
+function revertOrder(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const idx = ORDER_STATUSES.indexOf(o.status);
+  if (idx <= 0) return;
+  if (!confirm(`「${ORDER_STATUSES[idx - 1]}」に戻しますか？`)) return;
+  o.status = ORDER_STATUSES[idx - 1];
+  saveOrders();
+  renderOrders();
+}
+
+function deleteOrder(id) {
+  if (!confirm('削除しますか？')) return;
+  orders = orders.filter(o => o.id !== id);
+  saveOrders();
+  renderOrders();
+}
+
+let orderItemRows = [];
+
+function addOrderItemRow(name, qty) {
+  const row = { id: Date.now() + Math.random(), name: name || '', qty: qty || 1 };
+  orderItemRows.push(row);
+  renderOrderItemRows();
+}
+
+function removeOrderItemRow(rowId) {
+  orderItemRows = orderItemRows.filter(r => r.id !== rowId);
+  renderOrderItemRows();
+}
+
+function renderOrderItemRows() {
+  document.getElementById('order-items-list').innerHTML = orderItemRows.map((r, i) =>
+    `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <input type="text" placeholder="商品名" value="${escHtml(r.name)}" oninput="orderItemRows[${i}].name=this.value" style="flex:1;padding:8px 10px;font-size:14px;">
+      <input type="number" value="${r.qty}" min="1" oninput="orderItemRows[${i}].qty=parseInt(this.value)||1" style="width:60px;padding:8px;font-size:14px;text-align:center;">
+      <span style="font-size:12px;color:#888">個</span>
+      ${orderItemRows.length > 1 ? `<button onclick="removeOrderItemRow(${r.id})" style="border:none;background:none;color:#c0392b;font-size:18px;cursor:pointer;padding:0 4px;">×</button>` : ''}
+    </div>`
+  ).join('');
+}
+
+function openOrderModal(id) {
+  const o = id ? orders.find(x => x.id === id) : null;
+  document.getElementById('order-modal-title').textContent = o ? '発注依頼を編集' : '発注依頼を追加';
+  document.getElementById('order-edit-id').value = o ? o.id : '';
+  document.getElementById('order-instructor').value = o ? (o.instructor || '') : '';
+  document.getElementById('order-classroom').value = o ? (o.classroom || '') : '';
+  document.getElementById('order-student').value = o ? (o.student || '') : '';
+  document.getElementById('order-store').value = o ? (o.store || STORES[0]) : STORES[0];
+  document.getElementById('order-expected').value = o ? (o.expectedDate || '') : '';
+  document.getElementById('order-memo').value = o ? (o.memo || '') : '';
+  orderItemRows = [];
+  const src = o ? (o.orderItems || [{ name: o.itemName, qty: o.qty }]) : [];
+  if (src.length) { src.forEach(i => addOrderItemRow(i.name, i.qty)); }
+  else { addOrderItemRow(); }
+  openModal('modal-order');
+}
+
+function saveOrder() {
+  const validItems = orderItemRows.filter(r => r.name.trim());
+  if (!validItems.length) { alert('商品名を1つ以上入力してください'); return; }
+  const id = document.getElementById('order-edit-id').value;
+  const obj = {
+    orderItems: validItems.map(r => ({ name: r.name.trim(), qty: r.qty })),
+    instructor: document.getElementById('order-instructor').value.trim(),
+    classroom: document.getElementById('order-classroom').value.trim(),
+    student: document.getElementById('order-student').value.trim(),
+    store: document.getElementById('order-store').value,
+    expectedDate: document.getElementById('order-expected').value,
+    memo: document.getElementById('order-memo').value.trim(),
+  };
+  if (id) {
+    const idx = orders.findIndex(o => o.id === id);
+    orders[idx] = { ...orders[idx], ...obj };
+  } else {
+    obj.id = Date.now().toString();
+    obj.status = '依頼受付';
+    obj.createdAt = Date.now();
+    orders.push(obj);
+  }
+  saveOrders();
+  closeModal('modal-order');
+  renderOrders();
+}
+</script>
+</body>
+</html>
