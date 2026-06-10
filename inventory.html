@@ -306,7 +306,7 @@ function storeQty(item, store) {
 }
 function isLow(item) {
   const qty = activeStore === 'all' ? totalQty(item) : storeQty(item, activeStore);
-  return qty <= item.min;
+  return qty < item.min;
 }
 
 function renderStoreBar() {
@@ -361,7 +361,7 @@ function renderInventory() {
           const qty = storeQty(item, s);
           return `<div class="store-cell ${qty === 0 ? 'zero' : ''}">
             <div class="store-name">${s}</div>
-            <div class="store-qty ${low && qty <= item.min ? 'low' : ''}">${qty}</div>
+            <div class="store-qty ${low && qty < item.min ? 'low' : ''}">${qty}</div>
           </div>`;
         }).join('')
       : `<div class="store-cell highlight">
