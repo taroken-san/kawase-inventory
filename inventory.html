@@ -934,6 +934,21 @@ function openOrderModal(id) {
   openModal('modal-order');
 }
 
+const NOTIFY_URL = 'https://lineworks-claude-bot-production.up.railway.app/notify';
+const NOTIFY_SECRET = 'kawase-inventory-notify-2026';
+
+async function sendNotify(type, message, userId) {
+  try {
+    await fetch(NOTIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-notify-secret': NOTIFY_SECRET },
+      body: JSON.stringify({ type, message, userId })
+    });
+  } catch (e) {
+    console.warn('通知送信失敗:', e.message);
+  }
+}
+
 function saveOrder() {
   const validItems = orderItemRows.filter(r => r.name.trim());
   if (!validItems.length) { alert('商品名を1つ以上入力してください'); return; }
@@ -955,6 +970,10 @@ function saveOrder() {
     obj.status = '依頼受付';
     obj.createdAt = Date.now();
     orders.push(obj);
+    // 新規発注 → オーナーに通知
+    const itemList = obj.orderItems.map(r => `・${r.name}×${r.qty}`).join('\n');
+    const msg = `📦 発注依頼が届きました\n\n講師：${obj.instructor || '未入力'}\n店舗：${obj.store || '未入力'}\n\n${itemList}${obj.memo ? '\n\nメモ：' + obj.memo : ''}`;
+    sendNotify('order', msg);
   }
   saveOrders();
   closeModal('modal-order');
