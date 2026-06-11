@@ -170,12 +170,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <label>カテゴリ</label>
     <select id="item-category">
       <option>ウクレレ</option><option>三線</option><option>弦</option>
-      <option>チューナー</option><option>ケース</option><option>アクセサリー</option><option>備品(消耗品)</option><option>その他</option>
+      <option>チューナー</option><option>ケース</option><option>アクセサリー</option><option>セット</option><option>備品(消耗品)</option><option>その他</option>
     </select>
     <label>メーカー</label>
     <input type="text" id="item-maker" placeholder="例：キワヤ商会">
     <label>定価（税込）</label>
     <input type="number" id="item-price" value="" min="0" placeholder="例：25300">
+    <label>販売価格（税込）<span style="font-size:11px;color:#aaa;font-weight:400;margin-left:6px">定価と同じ場合は空欄でOK</span></label>
+    <input type="number" id="item-sale-price" value="" min="0" placeholder="例：22000">
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
       <input type="checkbox" id="item-lending" style="width:18px;height:18px;margin:0;">
       <span>貸出用（非売品）</span>
@@ -378,7 +380,10 @@ function renderInventory() {
           <div class="store-qty ${low ? 'low' : ''}">${storeQty(item, activeStore)}</div>
         </div>`;
 
-    const metaText = [item.maker, item.price ? '¥' + Number(item.price).toLocaleString() : '', item.memo].filter(Boolean).map(escHtml).join(' · ');
+    const priceDisplay = item.salePrice
+      ? `<span style="font-weight:600;color:#2d6a4f;">販売 ¥${Number(item.salePrice).toLocaleString()}</span><span style="color:#bbb;font-size:11px;margin-left:4px;">定価 ¥${Number(item.price||0).toLocaleString()}</span>`
+      : (item.price ? `¥${Number(item.price).toLocaleString()}` : '');
+    const metaText = [item.maker ? escHtml(item.maker) : '', item.memo ? escHtml(item.memo) : ''].filter(Boolean).join(' · ');
     return `<div class="card">
       <div class="card-header" onclick="toggleCard('${item.id}')" style="cursor:pointer;padding-bottom:10px;">
         <div class="name">${item.url ? `<a href="${escHtml(item.url)}" target="_blank" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline;text-decoration-color:#bbb;">${escHtml(item.name)}</a>` : escHtml(item.name)}${low ? '<span class="badge badge-low">不足</span>' : ''}</div>
@@ -390,6 +395,7 @@ function renderInventory() {
       <div class="card-detail" id="detail-${item.id}">
         <div class="store-grid">${storeCells}</div>
         ${activeStore === 'all' ? `<div class="total-row"><span class="total-label">合計</span><span class="total-val">${total}個</span><span style="font-size:11px;color:#aaa;margin-left:6px">最低在庫:${item.min}個</span></div>` : ''}
+        ${priceDisplay ? `<div class="card-memo" style="padding-top:4px;">${priceDisplay}</div>` : ''}
         ${metaText ? `<div class="card-memo">${metaText}</div>` : ''}
         ${item.isLending ? activeLendsHtml(item.id) : ''}
         <div class="card-actions">
@@ -448,6 +454,7 @@ function openAddModal() {
   document.getElementById('item-category').value = 'ウクレレ';
   document.getElementById('item-maker').value = '';
   document.getElementById('item-price').value = '';
+  document.getElementById('item-sale-price').value = '';
   document.getElementById('item-url').value = '';
   document.getElementById('item-lending').checked = false;
   document.getElementById('item-min').value = 0;
@@ -465,6 +472,7 @@ function openEditModal(id) {
   document.getElementById('item-category').value = item.category;
   document.getElementById('item-maker').value = item.maker || '';
   document.getElementById('item-price').value = item.price || '';
+  document.getElementById('item-sale-price').value = item.salePrice || '';
   document.getElementById('item-url').value = item.url || '';
   document.getElementById('item-lending').checked = !!item.isLending;
   document.getElementById('item-min').value = item.min;
@@ -484,6 +492,7 @@ function saveItem() {
     category: document.getElementById('item-category').value,
     maker: document.getElementById('item-maker').value.trim(),
     price: parseInt(document.getElementById('item-price').value) || 0,
+    salePrice: parseInt(document.getElementById('item-sale-price').value) || 0,
     url: document.getElementById('item-url').value.trim(),
     isLending: document.getElementById('item-lending').checked,
     min: parseInt(document.getElementById('item-min').value) || 0,
@@ -727,31 +736,26 @@ function exportExcel() {
   const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
 
   // シート1: 棚卸し一覧（店舗別）
-  const headers = ['カテゴリ', '商品名', 'メーカー', '定価（円）', ...STORES, '合計', '最低在庫数', 'メモ'];
-  const rows = [...items]
-    .sort((a,b) => {
-      if (a.category !== b.category) return a.category.localeCompare(b.category,'ja');
-      return a.name.localeCompare(b.name,'ja');
-    })
-    .map(item => [
-      item.category,
-      item.name,
-      item.maker || '',
-      item.price || 0,
-      ...STORES.map(s => (item.locations && item.locations[s]) || 0),
-      totalQty(item),
-      item.min || 0,
-      item.memo || ''
-    ]);
+  const headers = ['カテゴリ', '商品名', 'メーカー', '定価（円）', '販売価格（円）', ...STORES, '合計', '最低在庫数', 'メモ'];
+  const sorted = [...items].sort((a,b) => {
+    if (a.category !== b.category) return a.category.localeCompare(b.category,'ja');
+    return a.name.localeCompare(b.name,'ja');
+  });
+  const rows = sorted.map(item => [
+    item.category,
+    item.name,
+    item.maker || '',
+    item.price || 0,
+    item.salePrice || '',
+    ...STORES.map(s => (item.locations && item.locations[s]) || 0),
+    totalQty(item),
+    item.min || 0,
+    item.memo || ''
+  ]);
 
   // シート2: 会計事務所向け（カテゴリ・商品名・合計数・単価・金額）
   const headers2 = ['カテゴリ', '商品名', '合計在庫数', '定価（円）', '在庫金額（円）'];
-  const rows2 = [...items]
-    .sort((a,b) => {
-      if (a.category !== b.category) return a.category.localeCompare(b.category,'ja');
-      return a.name.localeCompare(b.name,'ja');
-    })
-    .map(item => {
+  const rows2 = sorted.map(item => {
       const qty = totalQty(item);
       const price = item.price || 0;
       return [item.category, item.name, qty, price, qty * price];
@@ -762,7 +766,7 @@ function exportExcel() {
   const wb = XLSX.utils.book_new();
 
   const ws1 = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  ws1['!cols'] = [10,30,15,12,...STORES.map(()=>8),8,10,20].map(w=>({wch:w}));
+  ws1['!cols'] = [10,30,15,12,12,...STORES.map(()=>8),8,10,20].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb, ws1, '棚卸し一覧');
 
   const ws2 = XLSX.utils.aoa_to_sheet([headers2, ...rows2]);
