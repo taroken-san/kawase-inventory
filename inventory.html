@@ -123,6 +123,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   <div class="header-row">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     <h1>在庫管理</h1>
+    <button onclick="openModal('modal-help')" style="background:#f0f0e8;color:#555;border:none;border-radius:8px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer;margin-left:auto;">使い方</button>
     <button onclick="openAddModal()" style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;">+ 追加</button>
   </div>
   <div class="store-bar" id="store-bar"></div>
@@ -165,6 +166,36 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 </div>
 
 <!-- 追加・編集モーダル -->
+<div class="modal-backdrop" id="modal-help" onclick="closeModal('modal-help')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>📖 使い方ガイド</h2>
+    <div style="font-size:14px;line-height:1.7;color:#333;">
+
+      <h3 style="margin:16px 0 6px;font-size:15px;">🔍 在庫を調べる</h3>
+      <p style="margin:0 0 4px;">上部の<b>店舗ボタン</b>で店舗を切り替えると、その店舗の在庫数が表示されます。「すべて」で全店舗の合計を確認できます。</p>
+      <p style="margin:0 0 4px;">検索バーに商品名やカテゴリを入れると絞り込めます。</p>
+      <p style="margin:0;"><b>「在庫がある商品だけ表示」</b>にチェックを入れると、在庫のある商品だけが並びます。</p>
+
+      <h3 style="margin:16px 0 6px;font-size:15px;">📦 発注を依頼する</h3>
+      <p style="margin:0 0 4px;">下のタブから<b>「発注管理」</b>を開き、<b>「+ 発注依頼を追加」</b>をタップ。</p>
+      <p style="margin:0 0 4px;">商品名・数量、<b>依頼した講師（自分）</b>、教室名、生徒名、受け取り店舗を入力して保存します。</p>
+      <p style="margin:0;">保存すると<b>事務局に自動で通知</b>が届きます。</p>
+
+      <h3 style="margin:16px 0 6px;font-size:15px;">🔔 入荷のお知らせ</h3>
+      <p style="margin:0 0 4px;">発注した商品が入荷すると、<b>依頼した講師ご本人のLINE WORKSに通知</b>が届きます。</p>
+      <p style="margin:0;">通知を受け取ったら、受け取り店舗へ商品を取りに行ってください。</p>
+
+      <h3 style="margin:16px 0 6px;font-size:15px;">📊 発注の進み具合</h3>
+      <p style="margin:0;">発注管理タブで、各依頼が「依頼受付 → 発注済み → 入荷済み → 渡し済み」のどの段階かを確認できます。</p>
+
+      <p style="margin:16px 0 0;font-size:12px;color:#999;">不明点は事務局（川瀬）までご連絡ください。</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-save" onclick="closeModal('modal-help')" style="margin-bottom:0">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modal-add" onclick="closeModal('modal-add')">
   <div class="modal" onclick="event.stopPropagation()">
     <h2 id="modal-title">アイテム追加</h2>
