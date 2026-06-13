@@ -141,8 +141,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <input type="text" id="search-input" placeholder="商品名・カテゴリで検索" oninput="renderInventory()">
   </div>
   <div class="filter-bar" id="filter-bar"></div>
+  <label style="display:flex;align-items:center;gap:7px;margin-bottom:12px;font-size:13px;color:#555;cursor:pointer;">
+    <input type="checkbox" id="instock-only" style="width:17px;height:17px;margin:0;" onchange="renderInventory()">
+    在庫がある商品だけ表示
+  </label>
   <div id="inventory-list"></div>
-  <div style="padding: 12px 0 24px;">
+  <div id="export-wrap" style="padding: 12px 0 24px;">
     <button class="btn btn-primary" onclick="exportExcel()" style="background:#2d6a4f;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       棚卸しExcel出力
@@ -338,10 +342,13 @@ function setStore(s) {
 
 function renderInventory() {
   const q = document.getElementById('search-input').value.toLowerCase();
+  const inStockOnly = document.getElementById('instock-only').checked;
   const filtered = items.filter(i => {
     const matchQ = !q || i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q);
     const matchCat = activeCat === 'all' || i.category === activeCat;
-    return matchQ && matchCat;
+    const qty = activeStore === 'all' ? totalQty(i) : storeQty(i, activeStore);
+    const matchStock = !inStockOnly || qty > 0;
+    return matchQ && matchCat && matchStock;
   }).sort((a, b) => {
     if (a.category !== b.category) return a.category.localeCompare(b.category, 'ja');
     return a.name.localeCompare(b.name, 'ja');
@@ -353,6 +360,9 @@ function renderInventory() {
     const label = c === 'all' ? 'すべて' : c;
     return `<div class="filter-chip ${activeCat === c ? 'active' : ''}" onclick="setCat('${c}')">${label}</div>`;
   }).join('');
+
+  // 棚卸しExcel出力は「すべて」表示時のみ
+  document.getElementById('export-wrap').style.display = activeCat === 'all' ? '' : 'none';
 
   const lowItems = items.filter(i => isLow(i));
   const alertBox = document.getElementById('alert-box');
