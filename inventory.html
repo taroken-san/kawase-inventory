@@ -124,7 +124,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     <h1>在庫管理</h1>
     <button onclick="openModal('modal-help')" style="background:#f0f0e8;color:#555;border:none;border-radius:8px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer;margin-left:auto;">使い方</button>
-    <button onclick="openAddModal()" style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;">+ 追加</button>
+    <button id="add-item-btn" onclick="openAddModal()" style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;">+ 追加</button>
   </div>
   <div class="store-bar" id="store-bar"></div>
 </header>
@@ -398,6 +398,7 @@ function setStore(s) {
   activeStore = s;
   renderStoreBar();
   renderInventory();
+  renderOrders();
 }
 
 function renderInventory() {
@@ -941,20 +942,25 @@ function switchTab(name, el) {
   el.classList.add('active');
   if (name === 'history') renderHistory();
   if (name === 'orders') renderOrders();
-  const addBtn = document.querySelector('header button');
+  const addBtn = document.getElementById('add-item-btn');
   addBtn.style.display = name === 'inventory' ? '' : 'none';
 }
 
 function renderOrders() {
-  const filtered = activeOrderStatus === 'all'
+  // 上部の店舗フィルタを発注一覧にも反映（受け取り先、取り寄せは元店舗も対象）
+  const byStore = activeStore === 'all'
     ? orders
-    : orders.filter(o => o.status === activeOrderStatus);
+    : orders.filter(o => o.store === activeStore || (o.type === 'transfer' && o.fromStore === activeStore));
+
+  const filtered = activeOrderStatus === 'all'
+    ? byStore
+    : byStore.filter(o => o.status === activeOrderStatus);
 
   const bar = document.getElementById('order-filter-bar');
   const counts = {};
-  ORDER_STATUSES.forEach(s => { counts[s] = orders.filter(o => o.status === s).length; });
+  ORDER_STATUSES.forEach(s => { counts[s] = byStore.filter(o => o.status === s).length; });
   bar.innerHTML = [['all', 'すべて'], ...ORDER_STATUSES.map(s => [s, s])].map(([val, label]) => {
-    const cnt = val === 'all' ? orders.length : counts[val];
+    const cnt = val === 'all' ? byStore.length : counts[val];
     return `<div class="filter-chip ${activeOrderStatus === val ? 'active' : ''}" onclick="setOrderStatus('${val}')">${label}${cnt > 0 ? ' ' + cnt : ''}</div>`;
   }).join('');
 
