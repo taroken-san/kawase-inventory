@@ -882,6 +882,7 @@ function renderOrders() {
         </div>
         <div class="status-pill s-${o.status}">${o.status}</div>
       </div>
+      ${o.noOrder ? `<div style="margin:0 14px 6px;display:inline-block;font-size:11px;font-weight:600;color:#7b4b00;background:#fff3e0;border-radius:4px;padding:2px 8px;">🔧 発注なし（作業のみ）</div>` : ''}
       <div class="progress-bar"><div class="progress-fill" style="width:${progressPct[o.status]}%"></div></div>
       <div style="padding:0 14px 8px">${itemsHtml}</div>
       <div class="order-meta">
@@ -891,6 +892,7 @@ function renderOrders() {
         <div class="order-meta-cell"><span>登録日</span>${dateStr}</div>
         ${o.expectedDate ? `<div class="order-meta-cell"><span>受け渡し希望日</span>${o.expectedDate}</div>` : ''}
       </div>
+      ${o.workContent ? `<div class="card-memo" style="padding:0 14px 4px">🔧 作業内容：${escHtml(o.workContent)}</div>` : ''}
       ${o.memo ? `<div class="card-memo" style="padding:0 14px 8px">${escHtml(o.memo)}</div>` : ''}
       <div class="order-actions">
         ${nextLabel ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
@@ -914,21 +916,26 @@ function advanceOrder(id) {
   if (next === '入荷済み') {
     const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
     const store = o.store || '不明';
-    let msgs = [];
-    orderItems.forEach(oi => {
-      const item = items.find(i => i.name === oi.name);
-      if (item) {
-        item.locations[store] = (item.locations[store] || 0) + oi.qty;
-        history.push({ id: item.id, name: item.name, type: 'in', qty: oi.qty, store, memo: '発注入荷', ts: Date.now() });
-        msgs.push(`${oi.name} ×${oi.qty}`);
-      }
-    });
-    if (msgs.length) { save(); alert(`${store}に入庫しました:\n${msgs.join('\n')}`); }
-    else { if (!confirm('在庫リストに一致する商品が見つかりません。そのままステータスを進めますか？')) return; }
+    if (o.noOrder) {
+      // 発注なし（作業のみ）→ 在庫は増やさず、ステータスのみ進める
+    } else {
+      let msgs = [];
+      orderItems.forEach(oi => {
+        const item = items.find(i => i.name === oi.name);
+        if (item) {
+          item.locations[store] = (item.locations[store] || 0) + oi.qty;
+          history.push({ id: item.id, name: item.name, type: 'in', qty: oi.qty, store, memo: '発注入荷', ts: Date.now() });
+          msgs.push(`${oi.name} ×${oi.qty}`);
+        }
+      });
+      if (msgs.length) { save(); alert(`${store}に入庫しました:\n${msgs.join('\n')}`); }
+      else { if (!confirm('在庫リストに一致する商品が見つかりません。そのままステータスを進めますか？')) return; }
+    }
     // 入荷 → 依頼した講師本人へ通知
     if (o.instructorUserId) {
       const itemList = orderItems.map(oi => `・${oi.name}×${oi.qty}`).join('\n');
-      const msg = `📥 ご依頼の商品が入荷しました\n\n受取店舗：${store}\n\n${itemList}${o.student ? '\n\n生徒：' + o.student : ''}`;
+      const head = o.noOrder ? '🔧 ご依頼の作業が完了しました' : '📥 ご依頼の商品が入荷しました';
+      const msg = `${head}\n\n受取店舗：${store}\n\n${itemList}${o.workContent ? '\n\n作業内容：' + o.workContent : ''}${o.student ? '\n\n生徒：' + o.student : ''}`;
       sendNotify('stock', msg, o.instructorUserId);
     }
   }
@@ -993,6 +1000,8 @@ function openOrderModal(id) {
   document.getElementById('order-store').value = o ? (o.store || STORES[0]) : STORES[0];
   document.getElementById('order-expected').value = o ? (o.expectedDate || '') : '';
   document.getElementById('order-memo').value = o ? (o.memo || '') : '';
+  document.getElementById('order-work').value = o ? (o.workContent || '') : '';
+  document.getElementById('order-noorder').checked = o ? !!o.noOrder : false;
   orderItemRows = [];
   const src = o ? (o.orderItems || [{ name: o.itemName, qty: o.qty }]) : [];
   if (src.length) { src.forEach(i => addOrderItemRow(i.name, i.qty)); }
@@ -1030,6 +1039,8 @@ function saveOrder() {
     store: document.getElementById('order-store').value,
     expectedDate: document.getElementById('order-expected').value,
     memo: document.getElementById('order-memo').value.trim(),
+    workContent: document.getElementById('order-work').value.trim(),
+    noOrder: document.getElementById('order-noorder').checked,
   };
   if (id) {
     const idx = orders.findIndex(o => o.id === id);
@@ -1041,7 +1052,8 @@ function saveOrder() {
     orders.push(obj);
     // 新規発注 → オーナーに通知
     const itemList = obj.orderItems.map(r => `・${r.name}×${r.qty}`).join('\n');
-    const msg = `📦 発注依頼が届きました\n\n講師：${obj.instructor || '未入力'}\n店舗：${obj.store || '未入力'}\n\n${itemList}${obj.memo ? '\n\nメモ：' + obj.memo : ''}`;
+    const head = obj.noOrder ? '🔧 作業のみの依頼が届きました（発注なし）' : '📦 発注依頼が届きました';
+    const msg = `${head}\n\n講師：${obj.instructor || '未入力'}\n店舗：${obj.store || '未入力'}\n\n${itemList}${obj.workContent ? '\n\n作業内容：' + obj.workContent : ''}${obj.memo ? '\n\nメモ：' + obj.memo : ''}`;
     sendNotify('order', msg);
   }
   saveOrders();
