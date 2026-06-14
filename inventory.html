@@ -864,8 +864,12 @@ function renderOrders() {
   }
 
   const progressPct = { '依頼受付': 25, '発注済み': 50, '入荷済み': 75, '渡し済み': 100 };
+  const progressPctNoOrder = { '依頼受付': 33, '入荷済み': 66, '渡し済み': 100 };
   list.innerHTML = [...filtered].reverse().map(o => {
-    const nextLabel = { '依頼受付': '発注済みへ', '発注済み': '入荷済みへ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status];
+    const nextLabel = o.noOrder
+      ? { '依頼受付': '作業完了へ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status]
+      : { '依頼受付': '発注済みへ', '発注済み': '入荷済みへ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status];
+    const statusLabel = (o.noOrder && o.status === '入荷済み') ? '作業完了' : o.status;
     const idx = ORDER_STATUSES.indexOf(o.status);
     const d = new Date(o.createdAt);
     const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
@@ -880,10 +884,10 @@ function renderOrders() {
         <div class="oname">${o.student ? escHtml(o.student) : (o.instructor ? escHtml(o.instructor) : '依頼')}
           ${o.classroom ? `<span style="font-size:11px;font-weight:400;color:#888;margin-left:4px">${escHtml(o.classroom)}</span>` : ''}
         </div>
-        <div class="status-pill s-${o.status}">${o.status}</div>
+        <div class="status-pill s-${o.status}">${statusLabel}</div>
       </div>
       ${o.noOrder ? `<div style="margin:0 14px 6px;display:inline-block;font-size:11px;font-weight:600;color:#7b4b00;background:#fff3e0;border-radius:4px;padding:2px 8px;">🔧 発注なし（作業のみ）</div>` : ''}
-      <div class="progress-bar"><div class="progress-fill" style="width:${progressPct[o.status]}%"></div></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${(o.noOrder ? progressPctNoOrder : progressPct)[o.status]}%"></div></div>
       <div style="padding:0 14px 8px">${itemsHtml}</div>
       <div class="order-meta">
         ${o.instructor ? `<div class="order-meta-cell"><span>講師</span>${escHtml(o.instructor)}</div>` : ''}
@@ -911,7 +915,9 @@ function advanceOrder(id) {
   if (!o) return;
   const idx = ORDER_STATUSES.indexOf(o.status);
   if (idx < 0 || idx >= ORDER_STATUSES.length - 1) return;
-  const next = ORDER_STATUSES[idx + 1];
+  let next = ORDER_STATUSES[idx + 1];
+  // 作業のみ（発注なし）は「発注済み」を飛ばす
+  if (o.noOrder && next === '発注済み') next = '入荷済み';
 
   if (next === '入荷済み') {
     const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
@@ -950,8 +956,12 @@ function revertOrder(id) {
   if (!o) return;
   const idx = ORDER_STATUSES.indexOf(o.status);
   if (idx <= 0) return;
-  if (!confirm(`「${ORDER_STATUSES[idx - 1]}」に戻しますか？`)) return;
-  o.status = ORDER_STATUSES[idx - 1];
+  let prev = ORDER_STATUSES[idx - 1];
+  // 作業のみ（発注なし）は「発注済み」を飛ばす
+  if (o.noOrder && prev === '発注済み') prev = '依頼受付';
+  const prevLabel = (o.noOrder && prev === '入荷済み') ? '作業完了' : prev;
+  if (!confirm(`「${prevLabel}」に戻しますか？`)) return;
+  o.status = prev;
   saveOrders();
   renderOrders();
 }
