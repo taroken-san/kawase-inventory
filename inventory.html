@@ -325,6 +325,22 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   </div>
 </div>
 
+<!-- 取り寄せ元選択モーダル -->
+<div class="modal-backdrop" id="modal-transfer" onclick="closeModal('modal-transfer')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>他店から取り寄せ</h2>
+    <input type="hidden" id="transfer-order-id">
+    <p id="transfer-dest" style="font-size:13px;color:#888;margin:0 0 10px;"></p>
+    <label>取り寄せ元の店舗（在庫がある店舗）</label>
+    <div class="store-select-grid" id="transfer-store-grid"></div>
+    <p id="transfer-none" style="font-size:13px;color:#c0392b;margin-top:8px;display:none;">取り寄せできる在庫がある店舗がありません。「発注する」をご検討ください。</p>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('modal-transfer')">キャンセル</button>
+      <button class="btn btn-primary btn-save" id="transfer-save-btn" onclick="confirmTransfer()" style="margin-bottom:0">取り寄せを確定</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Firebase初期化
 const firebaseConfig = {
@@ -651,6 +667,84 @@ function adjustMoveQty(delta) {
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+// ===== 店舗間取り寄せ =====
+let transferSelectedStore = null;
+
+// 依頼の全商品を qty 以上満たせる店舗（受け取り先は除く）
+function transferCandidateStores(o) {
+  const dest = o.store;
+  const orderItems = o.orderItems || [];
+  return STORES.filter(s => {
+    if (s === dest) return false;
+    return orderItems.every(oi => {
+      const item = items.find(i => i.name === oi.name);
+      return item && storeQty(item, s) >= oi.qty;
+    });
+  });
+}
+
+function openTransferModal(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  document.getElementById('transfer-order-id').value = id;
+  document.getElementById('transfer-dest').textContent = `受け取り先：${o.store || '未設定'} へ`;
+  const cands = transferCandidateStores(o);
+  transferSelectedStore = cands[0] || null;
+  renderTransferGrid(o, cands);
+  const none = !cands.length;
+  document.getElementById('transfer-none').style.display = none ? '' : 'none';
+  document.getElementById('transfer-save-btn').style.display = none ? 'none' : '';
+  openModal('modal-transfer');
+}
+
+function renderTransferGrid(o, cands) {
+  const first = (o.orderItems || [])[0];
+  const item = first ? items.find(i => i.name === first.name) : null;
+  document.getElementById('transfer-store-grid').innerHTML = cands.map(s => {
+    const qty = item ? storeQty(item, s) : 0;
+    return `<button class="store-select-btn ${transferSelectedStore === s ? 'selected' : ''}" onclick="selectTransferStore('${s}')">${s}<br><span style="font-size:11px;opacity:0.7">在庫 ${qty}個</span></button>`;
+  }).join('');
+}
+
+function selectTransferStore(s) {
+  transferSelectedStore = s;
+  const id = document.getElementById('transfer-order-id').value;
+  const o = orders.find(x => x.id === id);
+  if (o) renderTransferGrid(o, transferCandidateStores(o));
+}
+
+function confirmTransfer() {
+  const id = document.getElementById('transfer-order-id').value;
+  const o = orders.find(x => x.id === id);
+  if (!o || !transferSelectedStore) return;
+  o.type = 'transfer';
+  o.noOrder = false;
+  o.fromStore = transferSelectedStore;
+  o.status = '入荷済み'; // = 取り寄せ中（発注済みは飛ばす）
+  saveOrders();
+  closeModal('modal-transfer');
+  renderOrders();
+}
+
+// 依頼の主商品の在庫を店舗チップで（在庫がある店舗のみ）
+function orderItemStockChips(o) {
+  const first = (o.orderItems || [])[0];
+  if (!first) return '';
+  const item = items.find(i => i.name === first.name);
+  if (!item) return '<span style="font-size:11px;color:#c0392b;">在庫リストに該当商品なし</span>';
+  const withStock = STORES.filter(s => storeQty(item, s) > 0);
+  if (!withStock.length) return '<span style="font-size:11px;color:#c0392b;">どの店舗にも在庫なし → 発注が必要</span>';
+  return withStock.map(s =>
+    `<span style="font-size:12px;padding:3px 9px;border-radius:20px;background:#e1f5ee;color:#0f6e56;">${s} ${storeQty(item, s)}</span>`
+  ).join('');
+}
+
+function orderStatusLabel(o, status) {
+  if (o.type === 'transfer' && status === '入荷済み') return '取り寄せ中';
+  if (o.noOrder && status === '入荷済み') return '作業完了';
+  return status;
+}
+
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -873,12 +967,17 @@ function renderOrders() {
   const progressPct = { '依頼受付': 25, '発注済み': 50, '入荷済み': 75, '渡し済み': 100 };
   const progressPctNoOrder = { '依頼受付': 33, '入荷済み': 66, '渡し済み': 100 };
   list.innerHTML = [...filtered].reverse().map(o => {
-    const nextLabel = o.noOrder
-      ? { '依頼受付': '作業完了へ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status]
-      : { '依頼受付': '発注済みへ', '発注済み': '入荷済みへ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status];
-    const statusLabel = (o.noOrder && o.status === '入荷済み') ? '作業完了' : o.status;
-    const typeBadge = { score: '🎼 楽譜作成', work: '🔧 その他作業' }[o.type] || (o.noOrder ? '🔧 発注なし（作業のみ）' : '');
+    const etype = o.type || (o.noOrder ? 'work' : 'order');
+    const showRouting = etype === 'order' && o.status === '依頼受付';
+    const nextLabel = o.type === 'transfer'
+      ? { '入荷済み': '受け取り完了', '渡し済み': null }[o.status]
+      : o.noOrder
+        ? { '依頼受付': '作業完了へ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status]
+        : { '依頼受付': '発注済みへ', '発注済み': '入荷済みへ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status];
+    const statusLabel = orderStatusLabel(o, o.status);
+    const typeBadge = { score: '🎼 楽譜作成', work: '🔧 その他作業', transfer: '🔁 取り寄せ' }[o.type] || (o.noOrder ? '🔧 発注なし（作業のみ）' : '');
     const typeShowQty = !(o.type === 'score' || o.type === 'work' || (o.noOrder && !o.type));
+    const usePctNoOrder = o.noOrder || o.type === 'transfer';
     const idx = ORDER_STATUSES.indexOf(o.status);
     const d = new Date(o.createdAt);
     const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
@@ -896,8 +995,18 @@ function renderOrders() {
         <div class="status-pill s-${o.status}">${statusLabel}</div>
       </div>
       ${typeBadge ? `<div style="margin:0 14px 6px;display:inline-block;font-size:11px;font-weight:600;color:#7b4b00;background:#fff3e0;border-radius:4px;padding:2px 8px;">${typeBadge}</div>` : ''}
-      <div class="progress-bar"><div class="progress-fill" style="width:${(o.noOrder ? progressPctNoOrder : progressPct)[o.status]}%"></div></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${(usePctNoOrder ? progressPctNoOrder : progressPct)[o.status]}%"></div></div>
+      ${o.type === 'transfer' ? `<div style="padding:0 14px 6px;font-size:14px;display:flex;align-items:center;gap:8px;">${escHtml(o.fromStore || '?')} → ${escHtml(o.store || '?')}</div>` : ''}
       <div style="padding:0 14px 8px">${itemsHtml}</div>
+      ${showRouting ? `<div style="margin:0 14px 8px;padding:10px 12px;background:#f7f6f2;border-radius:8px;">
+        <div style="font-size:11px;color:#888;margin-bottom:6px;">在庫がある店舗</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">${orderItemStockChips(o)}</div>
+        <div style="font-size:11px;color:#888;margin-bottom:6px;">どう手配する？</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-next" style="flex:1;background:#185fa5;border-color:#185fa5;" onclick="openTransferModal('${o.id}')">🔁 他店から取り寄せ</button>
+          <button class="btn btn-sm btn-edit" style="flex:1;" onclick="advanceOrder('${o.id}')">📦 発注する</button>
+        </div>
+      </div>` : ''}
       <div class="order-meta">
         ${o.instructor ? `<div class="order-meta-cell"><span>講師</span>${escHtml(o.instructor)}</div>` : ''}
         ${o.classroom ? `<div class="order-meta-cell"><span>教室</span>${escHtml(o.classroom)}</div>` : ''}
@@ -908,7 +1017,7 @@ function renderOrders() {
       ${o.workContent ? `<div class="card-memo" style="padding:0 14px 4px">🔧 作業内容：${escHtml(o.workContent)}</div>` : ''}
       ${o.memo ? `<div class="card-memo" style="padding:0 14px 8px">${escHtml(o.memo)}</div>` : ''}
       <div class="order-actions">
-        ${nextLabel ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
+        ${nextLabel && !showRouting ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
         ${idx > 0 ? `<button class="btn btn-sm btn-edit" onclick="revertOrder('${o.id}')">← 戻す</button>` : ''}
         <button class="btn btn-sm btn-edit" onclick="openOrderModal('${o.id}')">編集</button>
         <button class="btn btn-sm btn-order-del" onclick="deleteOrder('${o.id}')">削除</button>
@@ -925,8 +1034,36 @@ function advanceOrder(id) {
   const idx = ORDER_STATUSES.indexOf(o.status);
   if (idx < 0 || idx >= ORDER_STATUSES.length - 1) return;
   let next = ORDER_STATUSES[idx + 1];
-  // 作業のみ（発注なし）は「発注済み」を飛ばす
-  if (o.noOrder && next === '発注済み') next = '入荷済み';
+  // 作業のみ（発注なし）・取り寄せは「発注済み」を飛ばす
+  if ((o.noOrder || o.type === 'transfer') && next === '発注済み') next = '入荷済み';
+
+  // 取り寄せ：受け取り完了で元店舗→受け取り先へ在庫を移動
+  if (o.type === 'transfer' && next === '渡し済み') {
+    const orderItems = o.orderItems || [];
+    const dest = o.store || '不明';
+    const from = o.fromStore || '不明';
+    let msgs = [];
+    orderItems.forEach(oi => {
+      const item = items.find(i => i.name === oi.name);
+      if (item) {
+        item.locations[from] = Math.max(0, (item.locations[from] || 0) - oi.qty);
+        item.locations[dest] = (item.locations[dest] || 0) + oi.qty;
+        history.push({ id: item.id, name: item.name, type: 'out', qty: oi.qty, store: from, memo: `取り寄せ(${dest}へ)`, ts: Date.now() });
+        history.push({ id: item.id, name: item.name, type: 'in', qty: oi.qty, store: dest, memo: `取り寄せ(${from}から)`, ts: Date.now() });
+        msgs.push(`${oi.name} ×${oi.qty}`);
+      }
+    });
+    if (msgs.length) { save(); alert(`${from} → ${dest} に移動しました:\n${msgs.join('\n')}`); }
+    if (o.instructorUserId) {
+      const itemList = orderItems.map(oi => `・${oi.name}×${oi.qty}`).join('\n');
+      const msg = `📥 ご依頼の商品をご用意しました\n\n受取店舗：${dest}\n\n${itemList}${o.student ? '\n\n生徒：' + o.student : ''}`;
+      sendNotify('stock', msg, o.instructorUserId);
+    }
+    o.status = next;
+    saveOrders();
+    renderOrders();
+    return;
+  }
 
   if (next === '入荷済み') {
     const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
@@ -966,10 +1103,33 @@ function revertOrder(id) {
   const idx = ORDER_STATUSES.indexOf(o.status);
   if (idx <= 0) return;
   let prev = ORDER_STATUSES[idx - 1];
-  // 作業のみ（発注なし）は「発注済み」を飛ばす
-  if (o.noOrder && prev === '発注済み') prev = '依頼受付';
-  const prevLabel = (o.noOrder && prev === '入荷済み') ? '作業完了' : prev;
+  // 作業のみ（発注なし）・取り寄せは「発注済み」を飛ばす
+  if ((o.noOrder || o.type === 'transfer') && prev === '発注済み') prev = '依頼受付';
+  const prevLabel = orderStatusLabel(o, prev);
   if (!confirm(`「${prevLabel}」に戻しますか？`)) return;
+
+  // 取り寄せ完了を戻す → 在庫移動を取り消し（受け取り先−・元店舗＋）
+  if (o.type === 'transfer' && o.status === '渡し済み') {
+    const orderItems = o.orderItems || [];
+    const dest = o.store || '不明';
+    const from = o.fromStore || '不明';
+    orderItems.forEach(oi => {
+      const item = items.find(i => i.name === oi.name);
+      if (item) {
+        item.locations[dest] = Math.max(0, (item.locations[dest] || 0) - oi.qty);
+        item.locations[from] = (item.locations[from] || 0) + oi.qty;
+        history.push({ id: item.id, name: item.name, type: 'in', qty: oi.qty, store: from, memo: `取り寄せ取消(${dest}から戻し)`, ts: Date.now() });
+        history.push({ id: item.id, name: item.name, type: 'out', qty: oi.qty, store: dest, memo: `取り寄せ取消(${from}へ戻し)`, ts: Date.now() });
+      }
+    });
+    save();
+  }
+  // 取り寄せ中を依頼受付に戻す → 手配の選択をやり直せるよう発注扱いに戻す
+  if (o.type === 'transfer' && prev === '依頼受付') {
+    o.type = 'order';
+    delete o.fromStore;
+  }
+
   o.status = prev;
   saveOrders();
   renderOrders();
@@ -1011,6 +1171,7 @@ const ORDER_TYPES = {
   order: { itemsLabel: '商品リスト *', itemPh: '商品名', addBtn: '+ 商品を追加', workLabel: '作業内容（取り付け等。任意）', showQty: true, noOrder: false, head: '📦 発注依頼が届きました', doneHead: '📥 ご依頼の商品が入荷しました' },
   score: { itemsLabel: '曲名 *', itemPh: '曲名', addBtn: '+ 曲を追加', workLabel: '補足（キー・調号など。任意）', showQty: false, noOrder: true, head: '🎼 楽譜作成の依頼が届きました', doneHead: '🎼 ご依頼の楽譜が完成しました' },
   work: { itemsLabel: '依頼内容 *', itemPh: '内容', addBtn: '+ 項目を追加', workLabel: '補足（任意）', showQty: false, noOrder: true, head: '🔧 作業依頼が届きました', doneHead: '🔧 ご依頼の作業が完了しました' },
+  transfer: { itemsLabel: '商品リスト *', itemPh: '商品名', addBtn: '+ 商品を追加', workLabel: '作業内容（任意）', showQty: true, noOrder: false, head: '🔁 取り寄せ依頼', doneHead: '📥 ご依頼の商品をご用意しました' },
 };
 let currentOrderType = 'order';
 
