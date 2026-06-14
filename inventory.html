@@ -237,9 +237,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   <div class="modal" onclick="event.stopPropagation()">
     <h2 id="order-modal-title">発注依頼を追加</h2>
     <input type="hidden" id="order-edit-id">
-    <label>商品リスト *</label>
+    <label>依頼の種類</label>
+    <select id="order-type" onchange="onOrderTypeChange()">
+      <option value="order">📦 発注（在庫に反映）</option>
+      <option value="score">🎼 楽譜作成</option>
+      <option value="work">🔧 その他作業</option>
+    </select>
+    <label id="order-items-label">商品リスト *</label>
     <div id="order-items-list"></div>
-    <button onclick="addOrderItemRow()" style="width:100%;padding:8px;border:1px dashed #ccc;border-radius:8px;background:none;color:#555;font-size:13px;cursor:pointer;margin-top:6px;">+ 商品を追加</button>
+    <button id="order-additem-btn" onclick="addOrderItemRow()" style="width:100%;padding:8px;border:1px dashed #ccc;border-radius:8px;background:none;color:#555;font-size:13px;cursor:pointer;margin-top:6px;">+ 商品を追加</button>
     <label style="margin-top:16px">依頼した講師（入荷時にこの人へ通知）</label>
     <select id="order-instructor"></select>
     <label>教室名</label>
@@ -253,9 +259,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     </select>
     <label>受け渡し希望日</label>
     <input type="date" id="order-expected">
-    <label>作業内容（取り付け等。任意）</label>
+    <label id="order-work-label">作業内容（取り付け等。任意）</label>
     <input type="text" id="order-work" placeholder="例：エンドピン取り付け">
-    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+    <label id="order-noorder-row" style="display:flex;align-items:center;gap:8px;margin-top:12px;">
       <input type="checkbox" id="order-noorder" style="width:18px;height:18px;margin:0;">
       <span>発注なし（作業のみ・入荷時に在庫を増やさない）</span>
     </label>
@@ -870,13 +876,15 @@ function renderOrders() {
       ? { '依頼受付': '作業完了へ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status]
       : { '依頼受付': '発注済みへ', '発注済み': '入荷済みへ', '入荷済み': '講師に渡す', '渡し済み': null }[o.status];
     const statusLabel = (o.noOrder && o.status === '入荷済み') ? '作業完了' : o.status;
+    const typeBadge = { score: '🎼 楽譜作成', work: '🔧 その他作業' }[o.type] || (o.noOrder ? '🔧 発注なし（作業のみ）' : '');
+    const typeShowQty = !(o.type === 'score' || o.type === 'work' || (o.noOrder && !o.type));
     const idx = ORDER_STATUSES.indexOf(o.status);
     const d = new Date(o.createdAt);
     const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
     const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
     const itemsHtml = orderItems.map(i =>
       `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f5f5f0;font-size:13px;">
-        <span>${escHtml(i.name)}</span><span style="font-weight:600;white-space:nowrap;margin-left:8px">${i.qty}個</span>
+        <span>${escHtml(i.name)}</span>${typeShowQty ? `<span style="font-weight:600;white-space:nowrap;margin-left:8px">${i.qty}個</span>` : ''}
       </div>`
     ).join('');
     return `<div class="order-card">
@@ -886,7 +894,7 @@ function renderOrders() {
         </div>
         <div class="status-pill s-${o.status}">${statusLabel}</div>
       </div>
-      ${o.noOrder ? `<div style="margin:0 14px 6px;display:inline-block;font-size:11px;font-weight:600;color:#7b4b00;background:#fff3e0;border-radius:4px;padding:2px 8px;">🔧 発注なし（作業のみ）</div>` : ''}
+      ${typeBadge ? `<div style="margin:0 14px 6px;display:inline-block;font-size:11px;font-weight:600;color:#7b4b00;background:#fff3e0;border-radius:4px;padding:2px 8px;">${typeBadge}</div>` : ''}
       <div class="progress-bar"><div class="progress-fill" style="width:${(o.noOrder ? progressPctNoOrder : progressPct)[o.status]}%"></div></div>
       <div style="padding:0 14px 8px">${itemsHtml}</div>
       <div class="order-meta">
@@ -937,11 +945,11 @@ function advanceOrder(id) {
       if (msgs.length) { save(); alert(`${store}に入庫しました:\n${msgs.join('\n')}`); }
       else { if (!confirm('在庫リストに一致する商品が見つかりません。そのままステータスを進めますか？')) return; }
     }
-    // 入荷 → 依頼した講師本人へ通知
+    // 入荷/完了 → 依頼した講師本人へ通知
     if (o.instructorUserId) {
-      const itemList = orderItems.map(oi => `・${oi.name}×${oi.qty}`).join('\n');
-      const head = o.noOrder ? '🔧 ご依頼の作業が完了しました' : '📥 ご依頼の商品が入荷しました';
-      const msg = `${head}\n\n受取店舗：${store}\n\n${itemList}${o.workContent ? '\n\n作業内容：' + o.workContent : ''}${o.student ? '\n\n生徒：' + o.student : ''}`;
+      const cfg = ORDER_TYPES[o.type] || (o.noOrder ? ORDER_TYPES.work : ORDER_TYPES.order);
+      const itemList = orderItems.map(oi => cfg.showQty ? `・${oi.name}×${oi.qty}` : `・${oi.name}`).join('\n');
+      const msg = `${cfg.doneHead}\n\n受取店舗：${store}\n\n${itemList}${o.workContent ? '\n\n補足：' + o.workContent : ''}${o.student ? '\n\n生徒：' + o.student : ''}`;
       sendNotify('stock', msg, o.instructorUserId);
     }
   }
@@ -987,19 +995,39 @@ function removeOrderItemRow(rowId) {
 }
 
 function renderOrderItemRows() {
+  const cfg = ORDER_TYPES[currentOrderType] || ORDER_TYPES.order;
   document.getElementById('order-items-list').innerHTML = orderItemRows.map((r, i) =>
     `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-      <input type="text" placeholder="商品名" value="${escHtml(r.name)}" oninput="orderItemRows[${i}].name=this.value" style="flex:1;padding:8px 10px;font-size:14px;">
-      <input type="number" value="${r.qty}" min="1" oninput="orderItemRows[${i}].qty=parseInt(this.value)||1" style="width:60px;padding:8px;font-size:14px;text-align:center;">
-      <span style="font-size:12px;color:#888">個</span>
+      <input type="text" placeholder="${cfg.itemPh}" value="${escHtml(r.name)}" oninput="orderItemRows[${i}].name=this.value" style="flex:1;padding:8px 10px;font-size:14px;">
+      ${cfg.showQty ? `<input type="number" value="${r.qty}" min="1" oninput="orderItemRows[${i}].qty=parseInt(this.value)||1" style="width:60px;padding:8px;font-size:14px;text-align:center;">
+      <span style="font-size:12px;color:#888">個</span>` : ''}
       ${orderItemRows.length > 1 ? `<button onclick="removeOrderItemRow(${r.id})" style="border:none;background:none;color:#c0392b;font-size:18px;cursor:pointer;padding:0 4px;">×</button>` : ''}
     </div>`
   ).join('');
 }
 
+const ORDER_TYPES = {
+  order: { itemsLabel: '商品リスト *', itemPh: '商品名', addBtn: '+ 商品を追加', workLabel: '作業内容（取り付け等。任意）', showQty: true, noOrder: false, head: '📦 発注依頼が届きました', doneHead: '📥 ご依頼の商品が入荷しました' },
+  score: { itemsLabel: '曲名 *', itemPh: '曲名', addBtn: '+ 曲を追加', workLabel: '補足（キー・調号など。任意）', showQty: false, noOrder: true, head: '🎼 楽譜作成の依頼が届きました', doneHead: '🎼 ご依頼の楽譜が完成しました' },
+  work: { itemsLabel: '依頼内容 *', itemPh: '内容', addBtn: '+ 項目を追加', workLabel: '補足（任意）', showQty: false, noOrder: true, head: '🔧 作業依頼が届きました', doneHead: '🔧 ご依頼の作業が完了しました' },
+};
+let currentOrderType = 'order';
+
+function onOrderTypeChange() {
+  const t = document.getElementById('order-type').value;
+  currentOrderType = t;
+  const cfg = ORDER_TYPES[t] || ORDER_TYPES.order;
+  document.getElementById('order-items-label').textContent = cfg.itemsLabel;
+  document.getElementById('order-additem-btn').textContent = cfg.addBtn;
+  document.getElementById('order-work-label').textContent = cfg.workLabel;
+  document.getElementById('order-noorder-row').style.display = (t === 'order') ? 'flex' : 'none';
+  document.getElementById('order-noorder').checked = cfg.noOrder;
+  renderOrderItemRows();
+}
+
 function openOrderModal(id) {
   const o = id ? orders.find(x => x.id === id) : null;
-  document.getElementById('order-modal-title').textContent = o ? '発注依頼を編集' : '発注依頼を追加';
+  document.getElementById('order-modal-title').textContent = o ? '依頼を編集' : '依頼を追加';
   document.getElementById('order-edit-id').value = o ? o.id : '';
   const instSel = document.getElementById('order-instructor');
   instSel.innerHTML = '<option value="">（選択なし）</option>' +
@@ -1011,7 +1039,9 @@ function openOrderModal(id) {
   document.getElementById('order-expected').value = o ? (o.expectedDate || '') : '';
   document.getElementById('order-memo').value = o ? (o.memo || '') : '';
   document.getElementById('order-work').value = o ? (o.workContent || '') : '';
-  document.getElementById('order-noorder').checked = o ? !!o.noOrder : false;
+  document.getElementById('order-type').value = o ? (o.type || (o.noOrder ? 'work' : 'order')) : 'order';
+  onOrderTypeChange();
+  if (currentOrderType === 'order') document.getElementById('order-noorder').checked = o ? !!o.noOrder : false;
   orderItemRows = [];
   const src = o ? (o.orderItems || [{ name: o.itemName, qty: o.qty }]) : [];
   if (src.length) { src.forEach(i => addOrderItemRow(i.name, i.qty)); }
@@ -1051,6 +1081,7 @@ function saveOrder() {
     memo: document.getElementById('order-memo').value.trim(),
     workContent: document.getElementById('order-work').value.trim(),
     noOrder: document.getElementById('order-noorder').checked,
+    type: document.getElementById('order-type').value,
   };
   if (id) {
     const idx = orders.findIndex(o => o.id === id);
@@ -1061,9 +1092,9 @@ function saveOrder() {
     obj.createdAt = Date.now();
     orders.push(obj);
     // 新規発注 → オーナーに通知
-    const itemList = obj.orderItems.map(r => `・${r.name}×${r.qty}`).join('\n');
-    const head = obj.noOrder ? '🔧 作業のみの依頼が届きました（発注なし）' : '📦 発注依頼が届きました';
-    const msg = `${head}\n\n講師：${obj.instructor || '未入力'}\n店舗：${obj.store || '未入力'}\n\n${itemList}${obj.workContent ? '\n\n作業内容：' + obj.workContent : ''}${obj.memo ? '\n\nメモ：' + obj.memo : ''}`;
+    const cfg = ORDER_TYPES[obj.type] || ORDER_TYPES.order;
+    const itemList = obj.orderItems.map(r => cfg.showQty ? `・${r.name}×${r.qty}` : `・${r.name}`).join('\n');
+    const msg = `${cfg.head}\n\n講師：${obj.instructor || '未入力'}\n店舗：${obj.store || '未入力'}\n\n${itemList}${obj.workContent ? '\n\n補足：' + obj.workContent : ''}${obj.memo ? '\n\nメモ：' + obj.memo : ''}`;
     sendNotify('order', msg);
   }
   saveOrders();
