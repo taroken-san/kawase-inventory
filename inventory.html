@@ -253,6 +253,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     </select>
     <label>受け渡し希望日</label>
     <input type="date" id="order-expected">
+    <label>作業内容（取り付け等。任意）</label>
+    <input type="text" id="order-work" placeholder="例：エンドピン取り付け">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+      <input type="checkbox" id="order-noorder" style="width:18px;height:18px;margin:0;">
+      <span>発注なし（作業のみ・入荷時に在庫を増やさない）</span>
+    </label>
     <label>メモ</label>
     <textarea id="order-memo" rows="2" placeholder="例：メーカーに在庫確認中"></textarea>
     <div class="modal-actions">
