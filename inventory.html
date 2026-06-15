@@ -37,6 +37,7 @@ header h1 { font-size: 17px; font-weight: 600; flex: 1; }
 .card-header { padding: 11px 14px 0; display: flex; align-items: center; gap: 8px; }
 .card-header .name { font-size: 14px; font-weight: 600; flex: 1; line-height: 1.3; }
 .card-header .category { font-size: 11px; background: #f0f0e8; color: #555; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.card-header .price-chip { font-size: 13px; font-weight: 700; color: #2d6a4f; background: #e7f3ec; padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
 .store-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 10px 14px; }
 .store-cell { background: #f8f8f5; border-radius: 6px; padding: 6px 10px; }
 .store-cell.highlight { background: #e8f5e9; }
@@ -462,16 +463,19 @@ function renderInventory() {
           <div class="store-qty ${low ? 'low' : ''}">${storeQty(item, activeStore)}</div>
         </div>`;
 
+    const headerPrice = item.salePrice
+      ? `¥${Number(item.salePrice).toLocaleString()}`
+      : (item.price ? `¥${Number(item.price).toLocaleString()}` : '');
     const priceDisplay = item.salePrice
       ? `<span style="font-weight:600;color:#2d6a4f;">販売 ¥${Number(item.salePrice).toLocaleString()}</span><span style="color:#bbb;font-size:11px;margin-left:4px;">定価 ¥${Number(item.price||0).toLocaleString()}</span>`
       : (item.price ? `¥${Number(item.price).toLocaleString()}` : '');
-    const metaText = [item.maker ? escHtml(item.maker) : '', item.memo ? escHtml(item.memo) : ''].filter(Boolean).join(' · ');
+    const metaText = [item.category ? 'カテゴリ：' + escHtml(item.category) : '', item.maker ? escHtml(item.maker) : '', item.memo ? escHtml(item.memo) : ''].filter(Boolean).join(' · ');
     return `<div class="card">
       <div class="card-header" onclick="toggleCard('${item.id}')" style="cursor:pointer;padding-bottom:10px;">
         <div class="name">${item.url ? `<a href="${escHtml(item.url)}" target="_blank" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline;text-decoration-color:#bbb;">${escHtml(item.name)}</a>` : escHtml(item.name)}${low ? '<span class="badge badge-low">不足</span>' : ''}</div>
         <span style="font-size:13px;font-weight:700;margin-right:6px;white-space:nowrap">${activeStore === 'all' ? total + '個' : storeQty(item, activeStore) + '個'}</span>
         ${item.isLending ? '<span class="badge badge-lending">貸出用</span>' : ''}
-        <div class="category">${escHtml(item.category)}</div>
+        ${headerPrice ? `<div class="price-chip">${headerPrice}</div>` : ''}
         <span class="card-chevron" id="chev-${item.id}" style="font-size:12px;color:#aaa;margin-left:4px;transition:transform 0.2s;">▼</span>
       </div>
       <div class="card-detail" id="detail-${item.id}">
