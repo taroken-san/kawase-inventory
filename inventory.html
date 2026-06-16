@@ -252,14 +252,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <label style="margin-top:16px">依頼した講師（入荷時にこの人へ通知）</label>
     <select id="order-instructor"></select>
     <label>教室名</label>
-    <input type="text" id="order-classroom" placeholder="例：横浜教室">
+    <select id="order-classroom" onchange="onClassroomChange()"></select>
     <label>生徒名</label>
     <input type="text" id="order-student" placeholder="例：山田 花子">
-    <label>受け取り店舗（入荷時に在庫へ反映）</label>
-    <select id="order-store">
-      <option>横浜</option><option>阪東橋</option><option>町田</option><option>平塚</option>
-      <option>上大岡</option><option>木曽</option><option>青葉台</option><option>長津田</option><option>茅ヶ崎</option><option>藤沢</option>
-    </select>
+    <label>受け取り店舗（入荷時に在庫へ反映。教室と連動・変更可）</label>
+    <select id="order-store"></select>
     <label>受け渡し希望日</label>
     <input type="date" id="order-expected">
     <label id="order-work-label">作業内容（取り付け等。任意）</label>
@@ -1210,6 +1207,13 @@ function onOrderTypeChange() {
   renderOrderItemRows();
 }
 
+let orderStoreTouched = false;
+function onClassroomChange() {
+  // 教室を選んだら、店舗を手動変更していない限り受け取り店舗を同じ拠点に合わせる
+  if (orderStoreTouched) return;
+  const v = document.getElementById('order-classroom').value;
+  if (v) document.getElementById('order-store').value = v;
+}
 function openOrderModal(id) {
   const o = id ? orders.find(x => x.id === id) : null;
   document.getElementById('order-modal-title').textContent = o ? '依頼を編集' : '依頼を追加';
@@ -1218,9 +1222,17 @@ function openOrderModal(id) {
   instSel.innerHTML = '<option value="">（選択なし）</option>' +
     STAFF.map(s => `<option value="${escHtml(s.userId)}">${escHtml(s.name)}</option>`).join('');
   instSel.value = o ? (o.instructorUserId || '') : '';
-  document.getElementById('order-classroom').value = o ? (o.classroom || '') : '';
+  const classSel = document.getElementById('order-classroom');
+  const storeSel = document.getElementById('order-store');
+  const classOpts = STORES.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+  classSel.innerHTML = '<option value="">（選択なし）</option>' + classOpts;
+  storeSel.innerHTML = classOpts;
+  classSel.value = o ? (o.classroom || '') : '';
   document.getElementById('order-student').value = o ? (o.student || '') : '';
-  document.getElementById('order-store').value = o ? (o.store || STORES[0]) : STORES[0];
+  storeSel.value = o ? (o.store || STORES[0]) : STORES[0];
+  // 新規追加時は教室を選ぶと受け取り店舗が自動連動する。店舗を手動変更したら以降は連動を止める。
+  orderStoreTouched = !!o;
+  storeSel.onchange = () => { orderStoreTouched = true; };
   document.getElementById('order-expected').value = o ? (o.expectedDate || '') : '';
   document.getElementById('order-memo').value = o ? (o.memo || '') : '';
   document.getElementById('order-work').value = o ? (o.workContent || '') : '';
