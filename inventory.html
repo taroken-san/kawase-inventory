@@ -604,6 +604,9 @@ function formatPrice(price) {
 
 function defaultImageForItem(item) {
   if (DEFAULT_IMAGE_URLS[item.memo]) return DEFAULT_IMAGE_URLS[item.memo];
+  const text = `${item.name || ''} ${item.memo || ''}`;
+  const code = Object.keys(DEFAULT_IMAGE_URLS).find(key => text.includes(key));
+  if (code) return DEFAULT_IMAGE_URLS[code];
   const rule = DEFAULT_IMAGE_NAME_RULES.find(r => item.name.includes(r.keyword));
   return rule ? rule.imageUrl : '';
 }
