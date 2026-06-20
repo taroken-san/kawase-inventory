@@ -115,6 +115,37 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .btn-order-del { background: #fff0f0; color: #c0392b; }
 .progress-bar { height: 3px; background: #f0f0e8; margin: 0 14px 10px; border-radius: 2px; overflow: hidden; }
 .progress-fill { height: 100%; background: #27ae60; transition: width 0.3s; }
+.catalog-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; }
+.catalog-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: #555; cursor: pointer; }
+.catalog-toggle input { width: 17px; height: 17px; margin: 0; }
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.catalog-card { background: #fff; border: 1px solid #e0e0d8; border-radius: 8px; overflow: hidden; position: relative; }
+.catalog-image { width: 100%; aspect-ratio: 1 / 1; background: #f7f7f2; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 12px; }
+.catalog-image img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.catalog-body { padding: 10px 11px 12px; }
+.catalog-name { font-size: 13px; font-weight: 700; line-height: 1.35; margin-bottom: 5px; }
+.catalog-maker { font-size: 11px; color: #888; margin-bottom: 7px; }
+.catalog-price { font-size: 15px; font-weight: 800; color: #2d6a4f; }
+.catalog-set { margin-top: 6px; font-size: 11px; color: #2d6a4f; line-height: 1.35; }
+.catalog-stock { margin-top: 7px; font-size: 11px; color: #666; background: #f4f4ee; border-radius: 6px; padding: 5px 7px; }
+.featured-badge { position: absolute; top: 8px; left: 8px; background: #1a1a1a; color: #fff; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+.print-only-title { display: none; }
+@media print {
+  @page { size: A4; margin: 10mm; }
+  body { background: #fff; color: #111; }
+  header, .tab-bar, #screen-inventory, #screen-orders, #screen-history, .catalog-toolbar, #catalog-filter-bar, #fb-loading, .modal-backdrop { display: none !important; }
+  #screen-catalog { display: block !important; padding: 0; }
+  .print-only-title { display: block; font-size: 16pt; font-weight: 700; margin: 0 0 8mm; }
+  .catalog-grid { grid-template-columns: repeat(3, 1fr); gap: 5mm; }
+  .catalog-card { break-inside: avoid; page-break-inside: avoid; border-color: #ddd; border-radius: 3mm; }
+  .catalog-image { aspect-ratio: 1 / 0.82; }
+  .catalog-body { padding: 3mm; }
+  .catalog-name { font-size: 10pt; }
+  .catalog-maker, .catalog-set { font-size: 8pt; }
+  .catalog-price { font-size: 12pt; }
+  .catalog-stock { display: none !important; }
+  .featured-badge { font-size: 8pt; padding: 1.5mm 2.5mm; }
+}
 </style>
 </head>
 <body>
@@ -132,6 +163,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 
 <div class="tab-bar">
   <button class="active" onclick="switchTab('inventory', this)">在庫一覧</button>
+  <button onclick="switchTab('catalog', this)">📖 カタログ</button>
   <button onclick="switchTab('orders', this)">発注管理</button>
   <button onclick="switchTab('history', this)">入出庫履歴</button>
 </div>
@@ -154,6 +186,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
       棚卸しExcel出力
     </button>
   </div>
+</div>
+
+<div id="screen-catalog" class="screen">
+  <div class="print-only-title">商品カタログ</div>
+  <div class="catalog-toolbar">
+    <label class="catalog-toggle">
+      <input type="checkbox" id="catalog-show-stock" onchange="renderCatalog()">
+      在庫数を表示
+    </label>
+    <button class="btn btn-sm btn-edit" onclick="window.print()">🖨 印刷</button>
+  </div>
+  <div class="filter-bar" id="catalog-filter-bar"></div>
+  <div class="catalog-grid" id="catalog-list"></div>
 </div>
 
 <div id="screen-orders" class="screen">
@@ -216,6 +261,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <input type="number" id="item-sale-price" value="" min="0" placeholder="例：22000">
     <label>セット価格<span style="font-size:11px;color:#aaa;font-weight:400;margin-left:6px">何込みでいくらか（任意）</span></label>
     <input type="text" id="item-set-price" value="" placeholder="例：ケース＋チューナー＋Low-G込み ¥45,000">
+    <label>商品画像<span style="font-size:11px;color:#aaa;font-weight:400;margin-left:6px">img/fs-1g.png または https://...</span></label>
+    <input type="text" id="item-image-url" value="" placeholder="例：img/fs-1g.png">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+      <input type="checkbox" id="item-featured" style="width:18px;height:18px;margin:0;">
+      <span>⭐おすすめ表示</span>
+    </label>
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
       <input type="checkbox" id="item-lending" style="width:18px;height:18px;margin:0;">
       <span>貸出用（非売品）</span>
@@ -371,10 +422,40 @@ const STAFF = [
 
 const SEED = [{"id":"1","_v":3,"name":"Famous / FS-1G（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":25300,"memo":"FS-1G","min":0,"locations":{"横浜":1,"阪東橋":1,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"2","_v":3,"name":"Famous / FS-5G（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":38500,"memo":"FS-5G","min":0,"locations":{"横浜":1,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"3","_v":3,"name":"Famous / FS-200（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":57420,"memo":"FS-200","min":0,"locations":{"横浜":1,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"4","_v":3,"name":"KoAloha / KSO-10（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":31900,"memo":"KSO-10","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"5","_v":3,"name":"KIWAYA / KSU-1（ソプラノウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":11000,"memo":"KSU-1","min":0,"locations":{"横浜":2,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"6","_v":3,"name":"KIWAYA / KSU-1L（ソプラノロングウクレレ）","category":"ウクレレ","maker":"キワヤ商会","price":14300,"memo":"KSU-1L","min":0,"locations":{"横浜":1,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"7","_v":3,"name":"PONO / AS-K（ソプラノウクレレ アカシア材）","category":"ウクレレ","maker":"日本娯楽","price":84700,"memo":"AS-K","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"8","_v":3,"name":"PONO / MGS-K（ソプラノウクレレ マンゴー材）","category":"ウクレレ","maker":"日本娯楽","price":108000,"memo":"MGS-K","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"9","_v":3,"name":"aNueNue / aNN-U1（ソプラノウクレレ）","category":"ウクレレ","maker":"日本娯楽","price":92400,"memo":"aNN-U1","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"10","_v":3,"name":"aNueNue / aNN-S3（ソプラノウクレレ）","category":"ウクレレ","maker":"日本娯楽","price":0,"memo":"aNN-S3","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"11","_v":3,"name":"aNueNue / aNN-S4（ソプラノウクレレ）","category":"ウクレレ","maker":"日本娯楽","price":0,"memo":"aNN-S4","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"12","_v":3,"name":"Pupukea / UF-30（ソプラノウクレレ）","category":"ウクレレ","maker":"フジゲン","price":45500,"memo":"UF-30","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"13","_v":3,"name":"FGN Standard / FUS-TS（ソプラノウクレレ）","category":"ウクレレ","maker":"フジゲン","price":52000,"memo":"FUS-TS","min":0,"locations":{"横浜":1,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"14","_v":3,"name":"FGN Standard / FUS-TC（コンサートウクレレ）","category":"ウクレレ","maker":"フジゲン","price":52000,"memo":"FUS-TC","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"15","_v":3,"name":"ORCAS / OT-630（クリップチューナー）","category":"チューナー","maker":"日本娯楽","price":0,"memo":"OT-630","min":0,"locations":{"横浜":0,"阪東橋":2,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"16","_v":3,"name":"ORCAS / OS-LOW-G/W（Low-G巻弦 4弦のみ）","category":"弦","maker":"日本娯楽","price":330,"memo":"OS-LOW-G/W","min":0,"locations":{"横浜":5,"阪東橋":5,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"17","_v":3,"name":"ORCAS（コード付きクロス）","category":"アクセサリー","maker":"日本娯楽","price":0,"memo":"","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"18","_v":3,"name":"KIWAYA / KWLGセット（Low-G巻弦 4本セット）","category":"弦","maker":"キワヤ商会","price":0,"memo":"KWLGセット","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"19","_v":3,"name":"KIWAYA / KFC-LG（Low-Gナイロン弦 4本セット）","category":"弦","maker":"キワヤ商会","price":0,"memo":"KFC-LG","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"20","_v":3,"name":"KIWAYA / ５-S（ソプラノ用ソフトケース）","category":"ケース","maker":"キワヤ商会","price":2200,"memo":"５-S","min":0,"locations":{"横浜":2,"阪東橋":2,"町田":2,"平塚":2,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"21","_v":3,"name":"KIWAYA / No.30（ソプラノ用ソフトケース 3色）","category":"ケース","maker":"キワヤ商会","price":3300,"memo":"No.30","min":0,"locations":{"横浜":2,"阪東橋":0,"町田":1,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"22","_v":3,"name":"famous / UT-301（クリップチューナー）","category":"チューナー","maker":"キワヤ商会","price":2700,"memo":"UTー301","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"23","_v":3,"name":"KIWAYA（楽器用クロス）","category":"アクセサリー","maker":"キワヤ商会","price":500,"memo":"","min":0,"locations":{"横浜":10,"阪東橋":1,"町田":8,"平塚":2,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"24","_v":3,"name":"KIWAYA / ノンスリップ（滑り止めラバー）","category":"アクセサリー","maker":"キワヤ商会","price":1000,"memo":"ノンスリップラバー","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":4,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"25","_v":3,"name":"KIWAYA（壁掛けウクレレホルダー）","category":"アクセサリー","maker":"キワヤ商会","price":1100,"memo":"","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":1,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"26","_v":3,"name":"famous（コードスタンプ）","category":"アクセサリー","maker":"キワヤ商会","price":1600,"memo":"","min":0,"locations":{"横浜":0,"阪東橋":2,"町田":0,"平塚":1,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"27","_v":3,"name":"famous（カポタスト）","category":"アクセサリー","maker":"キワヤ商会","price":0,"memo":"","min":0,"locations":{"横浜":2,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"28","_v":3,"name":"famous / UH-425（スタンド型ウクレレホルダー）","category":"アクセサリー","maker":"キワヤ商会","price":1100,"memo":"UH-425","min":0,"locations":{"横浜":1,"阪東橋":1,"町田":2,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"29","_v":3,"name":"famous（ウクレレ用ピック）","category":"アクセサリー","maker":"キワヤ商会","price":400,"memo":"","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":2,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"30","_v":3,"name":"famous（エンドピン）","category":"アクセサリー","maker":"キワヤ商会","price":1100,"memo":"","min":0,"locations":{"横浜":2,"阪東橋":0,"町田":0,"平塚":4,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"31","_v":3,"name":"CR2032（ボタン電池 チューナー用）","category":"アクセサリー","maker":"キワヤ商会","price":200,"memo":"CR2032","min":0,"locations":{"横浜":0,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"32","_v":3,"name":"famous（ヘッドストラップ）","category":"アクセサリー","maker":"キワヤ商会","price":0,"memo":"","min":0,"locations":{"横浜":0,"阪東橋":1,"町田":2,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}},{"id":"33","_v":3,"name":"ASOVIVA（三線 人工皮）","category":"三線","maker":"ASOVIVA","price":0,"memo":"","min":0,"locations":{"横浜":1,"阪東橋":0,"町田":0,"平塚":0,"上大岡":0,"木曽":0,"青葉台":0,"長津田":0,"茅ヶ崎":0,"藤沢":0,"東戸塚":0}}];
 
+const DEFAULT_IMAGE_URLS = {
+  'FS-1G': 'img/fs-1g.png',
+  'FS-5G': 'img/fs-5g.jpg',
+  'FS-200': 'img/fs-200.jpg',
+  'KSU-1': 'img/ksu-1.jpg',
+  'KSU-1L': 'img/ksu-1l.jpg',
+  'KWLGセット': 'img/kwlg.jpg',
+  'KFC-LG': 'img/kfc-lg.jpg',
+  'AS-K': 'img/pono-as-k.jpg',
+  'MGS-K': 'img/pono-mgs-k.jpg',
+  'aNN-U1': 'img/anuenue-ann-u1.jpg',
+  'aNN-S3': 'img/anuenue-ann-s3.jpg',
+  'aNN-S4': 'img/anuenue-ann-s4.jpg',
+  'OT-630': 'img/orcas-ot-630.jpg',
+  'OS-LOW-G/W': 'img/orcas-os-low-g-w.jpg',
+  'UF-30': 'img/pupukea-uf-30.jpg',
+  'FUS-TS': 'img/fgn-fus-ts.jpg',
+  'FUS-TC': 'img/fgn-fus-tc.jpg',
+  'No.30': 'img/no-30.jpg',
+  'UTー301': 'img/ut-301.jpg',
+  'ノンスリップラバー': 'img/non-slip.jpg',
+  'UH-425': 'img/uh-425.jpg',
+};
+
+const DEFAULT_IMAGE_NAME_RULES = [
+  { keyword: 'カポタスト', imageUrl: 'img/capo.jpg' },
+  { keyword: 'エンドピン', imageUrl: 'img/endpin.jpg' },
+];
+
 let items = [];
 let history = [];
 let activeStore = 'all';
 let activeCat = 'all';
+let activeCatalogCat = 'all';
 let moveSelectedStore = STORES[0];
 
 function save() {
@@ -405,6 +486,7 @@ function setStore(s) {
   activeStore = s;
   renderStoreBar();
   renderInventory();
+  renderCatalog();
   renderOrders();
 }
 
@@ -502,6 +584,70 @@ function setCat(c) {
   renderInventory();
 }
 
+function itemPrice(item) {
+  return item.salePrice || item.price || 0;
+}
+
+function formatPrice(price) {
+  return price ? `¥${Number(price).toLocaleString()}` : '価格未設定';
+}
+
+function defaultImageForItem(item) {
+  if (DEFAULT_IMAGE_URLS[item.memo]) return DEFAULT_IMAGE_URLS[item.memo];
+  const rule = DEFAULT_IMAGE_NAME_RULES.find(r => item.name.includes(r.keyword));
+  return rule ? rule.imageUrl : '';
+}
+
+function renderCatalog() {
+  const list = document.getElementById('catalog-list');
+  const filterBar = document.getElementById('catalog-filter-bar');
+  if (!list || !filterBar) return;
+  const showStock = document.getElementById('catalog-show-stock').checked;
+  const cats = [...new Set(items.map(i => i.category))];
+  filterBar.innerHTML = ['all', ...cats].map(c => {
+    const label = c === 'all' ? 'すべて' : c;
+    return `<div class="filter-chip ${activeCatalogCat === c ? 'active' : ''}" onclick="setCatalogCat('${c}')">${label}</div>`;
+  }).join('');
+
+  const filtered = items.filter(i => {
+    if (i.isLending) return false;
+    return activeCatalogCat === 'all' || i.category === activeCatalogCat;
+  }).sort((a, b) => {
+    if (!!b.featured !== !!a.featured) return Number(!!b.featured) - Number(!!a.featured);
+    if (a.category !== b.category) return a.category.localeCompare(b.category, 'ja');
+    return a.name.localeCompare(b.name, 'ja');
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state">カタログ商品がありません</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(item => {
+    const stockText = activeStore === 'all'
+      ? `全店舗 ${totalQty(item)}個`
+      : `${activeStore} ${storeQty(item, activeStore)}個`;
+    return `<div class="catalog-card">
+      ${item.featured ? '<div class="featured-badge">おすすめ</div>' : ''}
+      <div class="catalog-image">
+        ${item.imageUrl ? `<img src="${escHtml(item.imageUrl)}" alt="${escHtml(item.name)}" loading="lazy">` : '写真なし'}
+      </div>
+      <div class="catalog-body">
+        <div class="catalog-name">${escHtml(item.name)}</div>
+        <div class="catalog-maker">${escHtml(item.maker || item.category || '')}</div>
+        <div class="catalog-price">${formatPrice(itemPrice(item))}</div>
+        ${item.setPrice ? `<div class="catalog-set">🎁 ${escHtml(item.setPrice)}</div>` : ''}
+        ${showStock ? `<div class="catalog-stock">${stockText}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setCatalogCat(c) {
+  activeCatalogCat = c;
+  renderCatalog();
+}
+
 function renderHistory() {
   const list = document.getElementById('history-list');
   if (!history.length) {
@@ -542,6 +688,8 @@ function openAddModal() {
   document.getElementById('item-price').value = '';
   document.getElementById('item-sale-price').value = '';
   document.getElementById('item-set-price').value = '';
+  document.getElementById('item-image-url').value = '';
+  document.getElementById('item-featured').checked = false;
   document.getElementById('item-url').value = '';
   document.getElementById('item-lending').checked = false;
   document.getElementById('item-min').value = 0;
@@ -561,6 +709,8 @@ function openEditModal(id) {
   document.getElementById('item-price').value = item.price || '';
   document.getElementById('item-sale-price').value = item.salePrice || '';
   document.getElementById('item-set-price').value = item.setPrice || '';
+  document.getElementById('item-image-url').value = item.imageUrl || '';
+  document.getElementById('item-featured').checked = !!item.featured;
   document.getElementById('item-url').value = item.url || '';
   document.getElementById('item-lending').checked = !!item.isLending;
   document.getElementById('item-min').value = item.min;
@@ -582,6 +732,8 @@ function saveItem() {
     price: parseInt(document.getElementById('item-price').value) || 0,
     salePrice: parseInt(document.getElementById('item-sale-price').value) || 0,
     setPrice: document.getElementById('item-set-price').value.trim(),
+    imageUrl: document.getElementById('item-image-url').value.trim(),
+    featured: document.getElementById('item-featured').checked,
     url: document.getElementById('item-url').value.trim(),
     isLending: document.getElementById('item-lending').checked,
     min: parseInt(document.getElementById('item-min').value) || 0,
@@ -598,6 +750,7 @@ function saveItem() {
   save();
   closeModal('modal-add');
   renderInventory();
+  renderCatalog();
 }
 
 function deleteItem(id) {
@@ -605,6 +758,7 @@ function deleteItem(id) {
   items = items.filter(i => i.id !== id);
   save();
   renderInventory();
+  renderCatalog();
 }
 
 function openMoveModal(id, type) {
@@ -856,25 +1010,27 @@ db.ref('/').once('value').then(snap => {
   const data = snap.val() || {};
 
   items = data.items || [];
+  let migrated = false;
   if (!items.length || !items[0].locations || items[0]._v !== 3) {
     items = SEED;
-    db.ref('items').set(items);
   } else {
-    // 新店舗が未登録の場合は追加
-    let migrated = false;
-    items.forEach(item => {
-      STORES.forEach(s => {
-        if (item.locations[s] === undefined) { item.locations[s] = 0; migrated = true; }
-      });
-    });
     // 最低在庫数を一度だけ全て0にリセット（在庫数は保持）
     if (!data.minResetDone) {
       items.forEach(item => { item.min = 0; });
       db.ref('minResetDone').set(true);
       migrated = true;
     }
-    if (migrated) db.ref('items').set(items);
   }
+  // 新店舗・カタログ用項目が未登録の場合は追加
+  items.forEach(item => {
+    STORES.forEach(s => {
+      if (item.locations[s] === undefined) { item.locations[s] = 0; migrated = true; }
+    });
+    if (item.featured === undefined) { item.featured = false; migrated = true; }
+    const defaultImage = defaultImageForItem(item);
+    if (!item.imageUrl && defaultImage) { item.imageUrl = defaultImage; migrated = true; }
+  });
+  if (migrated || !data.items || !data.items.length) db.ref('items').set(items);
   history = data.history || [];
   lendingLogs = data.lending || [];
   orders = data.orders || [];
@@ -882,12 +1038,13 @@ db.ref('/').once('value').then(snap => {
   showLoading(false);
   renderStoreBar();
   renderInventory();
+  renderCatalog();
   renderOrders();
 
   // リアルタイム同期（他端末の変更を受け取る）
   db.ref('items').on('value', snap => {
     const val = snap.val();
-    if (val) { items = val; renderInventory(); }
+    if (val) { items = val; renderInventory(); renderCatalog(); }
   });
   db.ref('history').on('value', snap => { const v = snap.val(); if (v) history = v; });
   db.ref('lending').on('value', snap => { const v = snap.val(); if (v) { lendingLogs = v; renderInventory(); } });
@@ -956,6 +1113,7 @@ function switchTab(name, el) {
   el.classList.add('active');
   if (name === 'history') renderHistory();
   if (name === 'orders') renderOrders();
+  if (name === 'catalog') renderCatalog();
   const addBtn = document.getElementById('add-item-btn');
   addBtn.style.display = name === 'inventory' ? '' : 'none';
 }
