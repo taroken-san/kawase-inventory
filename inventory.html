@@ -254,7 +254,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <label>カテゴリ</label>
     <select id="item-category">
       <option>ウクレレ</option><option>三線</option><option>弦</option>
-      <option>チューナー</option><option>ケース</option><option>アクセサリー</option><option>セット</option><option>備品(消耗品)</option><option>その他</option>
+      <option>チューナー</option><option>ケース</option><option>アクセサリー</option><option>セット</option><option>貸出用</option><option>備品(消耗品)</option><option>その他</option>
     </select>
     <label>メーカー</label>
     <input type="text" id="item-maker" placeholder="例：キワヤ商会">
@@ -437,6 +437,7 @@ const DEFAULT_IMAGE_URLS = {
   'FS-200': 'img/fs-200.jpg',
   'KSU-1': 'img/ksu-1.jpg',
   'KSU-1L': 'img/ksu-1l.jpg',
+  'KSU-2': 'img/ksu-2.jpg',
   'KWLGセット': 'img/kwlg.jpg',
   'KFC-LG': 'img/kfc-lg.jpg',
   'AS-K': 'img/pono-as-k.jpg',
@@ -451,12 +452,21 @@ const DEFAULT_IMAGE_URLS = {
   'FUS-TC': 'img/fgn-fus-tc.jpg',
   'No.30': 'img/no-30.jpg',
   'UTー301': 'img/ut-301.jpg',
+  'CL-80': 'img/kiwaya-cl-80.jpg',
+  'OSTA-04': 'img/orcas-osta-04.jpg',
+  'HS-BK': 'img/kiwaya-head-strap.jpg',
+  'HS-BR': 'img/kiwaya-head-strap.jpg',
   'ノンスリップラバー': 'img/non-slip.jpg',
   'UH-425': 'img/uh-425.jpg',
 };
 
 const DEFAULT_IMAGE_NAME_RULES = [
+  { keyword: 'コード付きクロス', imageUrl: 'img/orcas-cord-cloth.jpg' },
+  { keyword: '楽器用クロス', imageUrl: 'img/kiwaya-cl-80.jpg' },
+  { keyword: 'コードスタンプ', imageUrl: 'img/orcas-osta-04.jpg' },
   { keyword: 'カポタスト', imageUrl: 'img/capo.jpg' },
+  { keyword: 'ウクレレ用ピック', imageUrl: 'img/famous-leather-pick.jpg' },
+  { keyword: 'ヘッドストラップ', imageUrl: 'img/kiwaya-head-strap.jpg' },
   { keyword: 'エンドピン', imageUrl: 'img/endpin.jpg' },
 ];
 
