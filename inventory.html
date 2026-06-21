@@ -129,22 +129,34 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .catalog-maker { font-size: 11px; color: #888; margin-bottom: 7px; }
 .catalog-price { font-size: 15px; font-weight: 800; color: #2d6a4f; }
 .catalog-set { margin-top: 6px; font-size: 11px; color: #2d6a4f; line-height: 1.35; }
-.catalog-appeal { margin-top: 8px; font-size: 12px; line-height: 1.55; color: #333; }
+.catalog-appeal { margin-top: 8px; font-size: 12px; line-height: 1.55; color: #333; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .catalog-stock { margin-top: 7px; font-size: 11px; color: #666; background: #f4f4ee; border-radius: 6px; padding: 5px 7px; }
 .featured-badge { position: absolute; top: 8px; left: 8px; background: #1a1a1a; color: #fff; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
-.print-only-title { display: none; }
+.catalog-section { margin-bottom: 18px; }
+.catalog-section-title { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; color: #2d6a4f; border-left: 4px solid #2d6a4f; padding-left: 9px; margin: 0 0 10px; }
+.catalog-section-title.featured { color: #1a1a1a; border-left-color: #1a1a1a; }
+.print-header { display: none; align-items: center; gap: 10mm; border-bottom: 1.5pt solid #2d6a4f; padding-bottom: 5mm; margin-bottom: 7mm; }
+.print-logo { width: 18mm; height: 18mm; object-fit: contain; }
+.print-title { font-size: 17pt; font-weight: 700; color: #1a1a1a; }
+.print-subtitle { font-size: 10pt; color: #666; margin-top: 1mm; }
+.print-footer { display: none; align-items: center; justify-content: center; gap: 4mm; border-top: 0.5pt solid #ccc; padding-top: 3mm; margin-top: 5mm; font-size: 8.5pt; color: #888; }
+.print-footer-logo { width: 7mm; height: 7mm; object-fit: contain; }
 @media print {
   @page { size: A4; margin: 10mm; }
   body { background: #fff; color: #111; }
   header, .tab-bar, #screen-inventory, #screen-orders, #screen-history, .catalog-toolbar, #catalog-filter-bar, #fb-loading, .modal-backdrop { display: none !important; }
   #screen-catalog { display: block !important; padding: 0; }
-  .print-only-title { display: block; font-size: 16pt; font-weight: 700; margin: 0 0 8mm; }
-  .catalog-grid { grid-template-columns: repeat(3, 1fr); gap: 5mm; }
+  .print-header { display: flex !important; }
+  .print-footer { display: flex !important; }
+  .catalog-section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm; }
+  .catalog-section-title { font-size: 12pt; margin-bottom: 3mm; }
+  .catalog-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; }
   .catalog-card { break-inside: avoid; page-break-inside: avoid; border-color: #ddd; border-radius: 3mm; }
   .catalog-image { aspect-ratio: 1 / 0.82; }
   .catalog-body { padding: 3mm; }
   .catalog-name { font-size: 10pt; }
   .catalog-maker, .catalog-set, .catalog-appeal { font-size: 8pt; }
+  .catalog-appeal { -webkit-line-clamp: 3; }
   .catalog-price { font-size: 12pt; }
   .catalog-stock { display: none !important; }
   .featured-badge { font-size: 8pt; padding: 1.5mm 2.5mm; }
@@ -192,7 +204,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 </div>
 
 <div id="screen-catalog" class="screen">
-  <div class="print-only-title">商品カタログ</div>
+  <div class="print-header">
+    <img class="print-logo" src="img/logo.png" alt="シニアスマイル音楽教室">
+    <div class="print-title-wrap">
+      <div class="print-title">シニアスマイル音楽教室　ウクレレカタログ</div>
+      <div class="print-subtitle">ウクレレ・三線・アクセサリー</div>
+    </div>
+  </div>
   <div class="catalog-toolbar">
     <label class="catalog-toggle">
       <input type="checkbox" id="catalog-show-stock" onchange="renderCatalog()">
@@ -201,7 +219,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <button class="btn btn-sm btn-edit" onclick="window.print()">🖨 印刷</button>
   </div>
   <div class="filter-bar" id="catalog-filter-bar"></div>
-  <div class="catalog-grid" id="catalog-list"></div>
+  <div id="catalog-list"></div>
+  <div class="print-footer">
+    <img class="print-footer-logo" src="img/logo.png" alt="">
+    <span>シニアスマイル音楽教室　お問い合わせは各教室まで</span>
+  </div>
 </div>
 
 <div id="screen-orders" class="screen">
@@ -642,10 +664,6 @@ function renderCatalog() {
 
   const filtered = catalogItems.filter(i => {
     return activeCatalogCat === 'all' || i.category === activeCatalogCat;
-  }).sort((a, b) => {
-    if (!!b.featured !== !!a.featured) return Number(!!b.featured) - Number(!!a.featured);
-    if (a.category !== b.category) return a.category.localeCompare(b.category, 'ja');
-    return a.name.localeCompare(b.name, 'ja');
   });
 
   if (!filtered.length) {
@@ -653,7 +671,7 @@ function renderCatalog() {
     return;
   }
 
-  list.innerHTML = filtered.map(item => {
+  const cardHtml = item => {
     const stockText = activeStore === 'all'
       ? `全店舗 ${totalQty(item)}個`
       : `${activeStore} ${storeQty(item, activeStore)}個`;
@@ -671,7 +689,30 @@ function renderCatalog() {
         ${showStock ? `<div class="catalog-stock">${stockText}</div>` : ''}
       </div>
     </div>`;
-  }).join('');
+  };
+  const section = (title, arr, featured) => {
+    if (!arr.length) return '';
+    const sorted = [...arr].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    return `<div class="catalog-section">
+      <div class="catalog-section-title${featured ? ' featured' : ''}">${featured ? '⭐ ' : ''}${escHtml(title)}</div>
+      <div class="catalog-grid">${sorted.map(cardHtml).join('')}</div>
+    </div>`;
+  };
+
+  let html = '';
+  if (activeCatalogCat === 'all') {
+    html += section('おすすめ', filtered.filter(i => i.featured), true);
+    const rest = filtered.filter(i => !i.featured);
+    const cats = [...new Set(rest.map(i => i.category))].sort((a, b) => a.localeCompare(b, 'ja'));
+    html += cats.map(c => section(c, rest.filter(i => i.category === c), false)).join('');
+  } else {
+    const sorted = [...filtered].sort((a, b) => {
+      if (!!b.featured !== !!a.featured) return Number(!!b.featured) - Number(!!a.featured);
+      return a.name.localeCompare(b.name, 'ja');
+    });
+    html = `<div class="catalog-section"><div class="catalog-grid">${sorted.map(cardHtml).join('')}</div></div>`;
+  }
+  list.innerHTML = html;
 }
 
 function setCatalogCat(c) {
