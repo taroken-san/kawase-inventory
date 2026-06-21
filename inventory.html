@@ -501,7 +501,9 @@ const DEFAULT_IMAGE_NAME_RULES = [
 
 let items = [];
 let history = [];
-let activeStore = 'all';
+let activeStore = (() => {
+  try { return localStorage.getItem('kawase-inv-active-store') || 'all'; } catch (e) { return 'all'; }
+})();
 let activeCat = 'all';
 let activeCatalogCat = 'all';
 let moveSelectedStore = STORES[0];
@@ -532,6 +534,7 @@ function renderStoreBar() {
 
 function setStore(s) {
   activeStore = s;
+  try { localStorage.setItem('kawase-inv-active-store', s); } catch (e) {}
   renderStoreBar();
   renderInventory();
   renderCatalog();
@@ -861,7 +864,9 @@ function renderMoveStoreGrid(item) {
     const id = document.getElementById('move-id').value;
     item = items.find(i => i.id === id);
   }
-  document.getElementById('move-store-grid').innerHTML = STORES.map(s => {
+  // 店舗を選択中はその店舗に固定（他店の在庫を誤操作しないため）。「すべて」のときだけ全店舗から選べる。
+  const stores = activeStore !== 'all' ? [activeStore] : STORES;
+  document.getElementById('move-store-grid').innerHTML = stores.map(s => {
     const qty = storeQty(item, s);
     return `<button class="store-select-btn ${moveSelectedStore === s ? 'selected' : ''}" onclick="selectMoveStore('${s}')">${s}<br><span style="font-size:11px;opacity:0.7">現在 ${qty}個</span></button>`;
   }).join('');
@@ -1024,8 +1029,11 @@ function openLendModal(itemId) {
   if (!item) return;
   document.getElementById('lend-item-id').value = itemId;
   const sel = document.getElementById('lend-store');
-  sel.innerHTML = STORES.map(s => `<option value="${s}">${s}（在庫${storeQty(item,s)}台）</option>`).join('');
+  // 店舗を選択中はその店舗に固定（誤操作防止）。「すべて」のときだけ全店舗から選べる。
+  const stores = activeStore !== 'all' ? [activeStore] : STORES;
+  sel.innerHTML = stores.map(s => `<option value="${s}">${s}（在庫${storeQty(item,s)}台）</option>`).join('');
   sel.value = activeStore !== 'all' ? activeStore : STORES[0];
+  sel.disabled = activeStore !== 'all';
   document.getElementById('lend-borrower').value = '';
   document.getElementById('lend-qty').value = 1;
   document.getElementById('lend-qty-display').textContent = 1;
