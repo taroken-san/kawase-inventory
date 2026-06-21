@@ -304,7 +304,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     </label>
     <label>最低在庫数（アラート基準）</label>
     <input type="number" id="item-min" value="0" min="0">
-    <label>各店舗の在庫数</label>
+    <label id="loc-label">各店舗の在庫数</label>
     <div class="loc-grid" id="loc-inputs"></div>
     <label>商品ページURL</label>
     <input type="url" id="item-url" placeholder="https://...">
@@ -745,7 +745,11 @@ function renderHistory() {
 }
 
 function buildLocInputs(item) {
-  return STORES.map(s => {
+  // 店舗を選択中はその店舗の在庫欄だけ表示（他店の誤編集を防止）。「すべて」のときは全店舗。
+  const stores = activeStore !== 'all' ? [activeStore] : STORES;
+  const labelEl = document.getElementById('loc-label');
+  if (labelEl) labelEl.textContent = activeStore !== 'all' ? `${activeStore}の在庫数` : '各店舗の在庫数';
+  return stores.map(s => {
     const val = item ? (item.locations[s] || 0) : 0;
     return `<div class="loc-input-cell">
       <label>${s}</label>
@@ -801,9 +805,15 @@ function openEditModal(id) {
 function saveItem() {
   const name = document.getElementById('item-name').value.trim();
   if (!name) { alert('名前を入力してください'); return; }
-  const locs = {};
-  STORES.forEach(s => { locs[s] = parseInt(document.getElementById('loc-' + s).value) || 0; });
   const id = document.getElementById('edit-id').value;
+  // 表示されている店舗欄だけ読み取り、隠れている店舗（店舗選択中の他店）は既存値を保持。
+  const existing = id ? (items.find(i => i.id === id) || {}) : {};
+  const locs = { ...(existing.locations || {}) };
+  STORES.forEach(s => {
+    const el = document.getElementById('loc-' + s);
+    if (el) locs[s] = parseInt(el.value) || 0;
+    else if (!(s in locs)) locs[s] = 0;
+  });
   const obj = {
     name,
     category: document.getElementById('item-category').value,
