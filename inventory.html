@@ -33,6 +33,7 @@ header h1 { font-size: 17px; font-weight: 600; flex: 1; }
 .btn-delete { background: #fff0f0; color: #c0392b; }
 .btn-in { background: #e8f5e9; color: #1b5e20; }
 .btn-out { background: #fff3e0; color: #e65100; }
+.btn-order { background: #ede7f6; color: #4527a0; }
 .card { background: #fff; border-radius: 10px; border: 1px solid #e0e0d8; margin-bottom: 10px; overflow: hidden; }
 .card-header { padding: 11px 14px 0; display: flex; align-items: center; gap: 8px; }
 .item-thumb { width: 46px; height: 46px; border-radius: 7px; background: #f7f7f2; border: 1px solid #eee; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; color: #bbb; font-size: 10px; }
@@ -622,7 +623,8 @@ function renderInventory() {
           ${item.isLending
             ? `<button class="btn btn-sm btn-lend" onclick="openLendModal('${item.id}')">貸し出す</button>`
             : `<button class="btn btn-sm btn-in" onclick="openMoveModal('${item.id}','in')">入庫</button>
-               <button class="btn btn-sm btn-out" onclick="openMoveModal('${item.id}','out')">出庫</button>`}
+               <button class="btn btn-sm btn-out" onclick="openMoveModal('${item.id}','out')">出庫</button>
+               <button class="btn btn-sm btn-order" onclick="orderFromItem('${item.id}')">📦 発注</button>`}
           <button class="btn btn-sm btn-edit" onclick="openEditModal('${item.id}')">編集</button>
           <button class="btn btn-sm btn-delete" onclick="deleteItem('${item.id}')">削除</button>
         </div>
@@ -1470,6 +1472,20 @@ function onClassroomChange() {
   const v = document.getElementById('order-classroom').value;
   if (v) document.getElementById('order-store').value = v;
 }
+function orderFromItem(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  openOrderModal();              // 新規発注フォームを開く（type=order）
+  // 商品名をあらかじめ入れた状態にする
+  orderItemRows = [{ id: Date.now() + Math.random(), name: item.name, qty: 1 }];
+  renderOrderItemRows();
+  // 店舗を選択中なら教室・受け取り店舗をその店舗に合わせる
+  if (activeStore !== 'all') {
+    document.getElementById('order-classroom').value = activeStore;
+    document.getElementById('order-store').value = activeStore;
+  }
+}
+
 function openOrderModal(id) {
   const o = id ? orders.find(x => x.id === id) : null;
   document.getElementById('order-modal-title').textContent = o ? '依頼を編集' : '依頼を追加';
