@@ -366,7 +366,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <textarea id="order-memo" rows="2" placeholder="例：メーカーに在庫確認中"></textarea>
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModal('modal-order')">キャンセル</button>
-      <button class="btn btn-primary btn-save" onclick="saveOrder()" style="margin-bottom:0">保存</button>
+      <button class="btn btn-primary btn-save" id="order-save-btn" onclick="saveOrder()" style="margin-bottom:0">発注依頼</button>
     </div>
   </div>
 </div>
@@ -1460,10 +1460,10 @@ function renderOrderItemRows() {
 }
 
 const ORDER_TYPES = {
-  order: { itemsLabel: '商品リスト *', itemPh: '商品名', addBtn: '+ 商品を追加', workLabel: '作業内容（取り付け等。任意）', showQty: true, noOrder: false, head: '📦 発注依頼が届きました', doneHead: '📥 ご依頼の商品が入荷しました' },
-  score: { itemsLabel: '曲名 *', itemPh: '曲名', addBtn: '+ 曲を追加', workLabel: '補足（キー・調号など。任意）', showQty: false, noOrder: true, head: '🎼 楽譜作成の依頼が届きました', doneHead: '🎼 ご依頼の楽譜が完成しました' },
-  work: { itemsLabel: '依頼内容 *', itemPh: '内容', addBtn: '+ 項目を追加', workLabel: '補足（任意）', showQty: false, noOrder: true, head: '🔧 作業依頼が届きました', doneHead: '🔧 ご依頼の作業が完了しました' },
-  transfer: { itemsLabel: '商品リスト *', itemPh: '商品名', addBtn: '+ 商品を追加', workLabel: '作業内容（任意）', showQty: true, noOrder: false, head: '🔁 取り寄せ依頼', doneHead: '📥 ご依頼の商品をご用意しました' },
+  order: { itemsLabel: '商品リスト *', itemPh: '商品名', addBtn: '+ 商品を追加', workLabel: '作業内容（取り付け等。任意）', showQty: true, noOrder: false, saveBtn: '発注依頼', head: '📦 発注依頼が届きました', doneHead: '📥 ご依頼の商品が入荷しました' },
+  score: { itemsLabel: '曲名 *', itemPh: '曲名', addBtn: '+ 曲を追加', workLabel: '補足（キー・調号など。任意）', showQty: false, noOrder: true, saveBtn: '作成依頼', head: '🎼 楽譜作成の依頼が届きました', doneHead: '🎼 ご依頼の楽譜が完成しました' },
+  work: { itemsLabel: '依頼内容 *', itemPh: '内容', addBtn: '+ 項目を追加', workLabel: '補足（任意）', showQty: false, noOrder: true, saveBtn: '作業依頼', head: '🔧 作業依頼が届きました', doneHead: '🔧 ご依頼の作業が完了しました' },
+  transfer: { itemsLabel: '商品リスト *', itemPh: '商品名', addBtn: '+ 商品を追加', workLabel: '作業内容（任意）', showQty: true, noOrder: false, saveBtn: '取り寄せ', head: '🔁 取り寄せ依頼', doneHead: '📥 ご依頼の商品をご用意しました' },
 };
 let currentOrderType = 'order';
 
@@ -1476,6 +1476,9 @@ function onOrderTypeChange() {
   document.getElementById('order-work-label').textContent = cfg.workLabel;
   document.getElementById('order-noorder-row').style.display = (t === 'order') ? 'flex' : 'none';
   document.getElementById('order-noorder').checked = cfg.noOrder;
+  // 編集中は「保存」、新規は種類に応じた依頼ラベル（発注依頼／作成依頼／作業依頼／取り寄せ）
+  const editing = !!document.getElementById('order-edit-id').value;
+  document.getElementById('order-save-btn').textContent = editing ? '保存' : cfg.saveBtn;
   renderOrderItemRows();
 }
 
