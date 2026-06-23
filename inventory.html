@@ -170,7 +170,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 <header>
   <div class="header-row">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-    <h1>在庫管理</h1>
+    <h1 id="app-title" style="user-select:none;-webkit-user-select:none;">在庫管理</h1>
+    <span id="admin-badge" style="display:none;font-size:11px;font-weight:600;color:#185fa5;background:#e6f1fb;border-radius:10px;padding:2px 8px;">🔧 管理モード</span>
     <button onclick="openModal('modal-help')" style="background:#f0f0e8;color:#555;border:none;border-radius:8px;padding:6px 11px;font-size:13px;font-weight:600;cursor:pointer;margin-left:auto;">使い方</button>
     <button id="add-item-btn" onclick="openAddModal()" style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;">+ 追加</button>
   </div>
@@ -521,6 +522,55 @@ let activeStore = (() => {
 })();
 let activeCat = 'all';
 let activeCatalogCat = 'all';
+// 管理モード（代表のみ）: ステータスの進める/戻す/削除を表示。パスコードで切替、端末に記憶。
+let adminMode = (() => {
+  try { return localStorage.getItem('kawase-inv-admin') === '1'; } catch (e) { return false; }
+})();
+const ADMIN_PASSCODE = '1125';
+
+function updateAdminBadge() {
+  const b = document.getElementById('admin-badge');
+  if (b) b.style.display = adminMode ? 'inline-block' : 'none';
+}
+
+function toggleAdminMode() {
+  if (adminMode) {
+    if (confirm('管理モードを解除しますか？\n（ステータスの進める・戻す・削除が使えなくなります）')) {
+      adminMode = false;
+      try { localStorage.removeItem('kawase-inv-admin'); } catch (e) {}
+      updateAdminBadge();
+      renderOrders();
+      alert('管理モードを解除しました。');
+    }
+  } else {
+    const code = prompt('管理モードのパスコードを入力してください');
+    if (code === null) return;
+    if (code === ADMIN_PASSCODE) {
+      adminMode = true;
+      try { localStorage.setItem('kawase-inv-admin', '1'); } catch (e) {}
+      updateAdminBadge();
+      renderOrders();
+      alert('管理モードをONにしました。発注のステータス操作ができます。');
+    } else {
+      alert('パスコードが違います。');
+    }
+  }
+}
+
+// タイトル長押しで管理モードの切替メニューを出す
+function setupAdminToggle() {
+  const el = document.getElementById('app-title');
+  if (!el) return;
+  let timer = null;
+  const start = () => { timer = setTimeout(() => { timer = null; toggleAdminMode(); }, 600); };
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener('touchstart', start, { passive: true });
+  el.addEventListener('touchend', cancel);
+  el.addEventListener('touchmove', cancel);
+  el.addEventListener('mousedown', start);
+  el.addEventListener('mouseup', cancel);
+  el.addEventListener('mouseleave', cancel);
+}
 let moveSelectedStore = STORES[0];
 
 function save() {
@@ -1150,6 +1200,8 @@ db.ref('/').once('value').then(snap => {
   orders = data.orders || [];
 
   showLoading(false);
+  setupAdminToggle();
+  updateAdminBadge();
   renderStoreBar();
   renderInventory();
   renderCatalog();
@@ -1290,7 +1342,7 @@ function renderOrders() {
       <div class="progress-bar"><div class="progress-fill" style="width:${(usePctNoOrder ? progressPctNoOrder : progressPct)[o.status]}%"></div></div>
       ${o.type === 'transfer' ? `<div style="padding:0 14px 6px;font-size:14px;display:flex;align-items:center;gap:8px;">${escHtml(o.fromStore || '?')} → ${escHtml(o.store || '?')}</div>` : ''}
       <div style="padding:0 14px 8px">${itemsHtml}</div>
-      ${showRouting ? `<div style="margin:0 14px 8px;padding:10px 12px;background:#f7f6f2;border-radius:8px;">
+      ${showRouting && adminMode ? `<div style="margin:0 14px 8px;padding:10px 12px;background:#f7f6f2;border-radius:8px;">
         <div style="font-size:11px;color:#888;margin-bottom:6px;">在庫がある店舗</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">${orderItemStockChips(o)}</div>
         <div style="font-size:11px;color:#888;margin-bottom:6px;">どう手配する？</div>
@@ -1309,10 +1361,10 @@ function renderOrders() {
       ${o.workContent ? `<div class="card-memo" style="padding:0 14px 4px">🔧 作業内容：${escHtml(o.workContent)}</div>` : ''}
       ${o.memo ? `<div class="card-memo" style="padding:0 14px 8px">${escHtml(o.memo)}</div>` : ''}
       <div class="order-actions">
-        ${nextLabel && !showRouting ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
-        ${idx > 0 ? `<button class="btn btn-sm btn-edit" onclick="revertOrder('${o.id}')">← 戻す</button>` : ''}
+        ${adminMode && nextLabel && !showRouting ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
+        ${adminMode && idx > 0 ? `<button class="btn btn-sm btn-edit" onclick="revertOrder('${o.id}')">← 戻す</button>` : ''}
         <button class="btn btn-sm btn-edit" onclick="openOrderModal('${o.id}')">編集</button>
-        <button class="btn btn-sm btn-order-del" onclick="deleteOrder('${o.id}')">削除</button>
+        ${adminMode ? `<button class="btn btn-sm btn-order-del" onclick="deleteOrder('${o.id}')">削除</button>` : ''}
       </div>
     </div>`;
   }).join('');
