@@ -1329,6 +1329,17 @@ function advanceOrder(id) {
   // 作業のみ（発注なし）・取り寄せは「発注済み」を飛ばす
   if ((o.noOrder || o.type === 'transfer') && next === '発注済み') next = '入荷済み';
 
+  // 進める前に確認（誤タップ防止）。在庫が動く操作はその旨も明示。
+  let confirmMsg;
+  if (o.type === 'transfer' && next === '渡し済み') {
+    confirmMsg = `受け取り完了にしますか？\n${o.fromStore || '元店舗'} → ${o.store || '受取店舗'} に在庫を移動します。`;
+  } else if (next === '入荷済み' && !o.noOrder) {
+    confirmMsg = `「入荷済み」にしますか？\n${o.store || '受取店舗'} に在庫を追加し、依頼講師に通知します。`;
+  } else {
+    confirmMsg = `「${next}」に進めますか？`;
+  }
+  if (!confirm(confirmMsg)) return;
+
   // 取り寄せ：受け取り完了で元店舗→受け取り先へ在庫を移動
   if (o.type === 'transfer' && next === '渡し済み') {
     const orderItems = o.orderItems || [];
