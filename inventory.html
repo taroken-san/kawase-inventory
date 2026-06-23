@@ -539,6 +539,7 @@ function toggleAdminMode() {
       adminMode = false;
       try { localStorage.removeItem('kawase-inv-admin'); } catch (e) {}
       updateAdminBadge();
+      renderInventory();
       renderOrders();
       alert('管理モードを解除しました。');
     }
@@ -549,6 +550,7 @@ function toggleAdminMode() {
       adminMode = true;
       try { localStorage.setItem('kawase-inv-admin', '1'); } catch (e) {}
       updateAdminBadge();
+      renderInventory();
       renderOrders();
       alert('管理モードをONにしました。発注のステータス操作ができます。');
     } else {
@@ -690,7 +692,7 @@ function renderInventory() {
                <button class="btn btn-sm btn-out" onclick="openMoveModal('${item.id}','out')">出庫</button>
                <button class="btn btn-sm btn-order" onclick="orderFromItem('${item.id}')">📦 発注</button>`}
           <button class="btn btn-sm btn-edit" onclick="openEditModal('${item.id}')">編集</button>
-          <button class="btn btn-sm btn-delete" onclick="deleteItem('${item.id}')">削除</button>
+          ${adminMode ? `<button class="btn btn-sm btn-delete" onclick="deleteItem('${item.id}')">削除</button>` : ''}
         </div>
       </div>
     </div>`;
