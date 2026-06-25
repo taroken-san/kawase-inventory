@@ -1476,8 +1476,9 @@ function getPendingItemsForMaker(maker) {
       const inv = invByOrderName(oi.name);
       const m = (inv && inv.maker) ? inv.maker : '不明';
       if (m !== maker) return;
-      if (!agg[oi.name]) agg[oi.name] = { name: oi.name, qty: 0, memo: inv ? (inv.memo || '') : '' };
-      agg[oi.name].qty += (oi.qty || 1);
+      const key = oi.name + '|' + (oi.color || '');
+      if (!agg[key]) agg[key] = { name: oi.name, color: oi.color || '', qty: 0, memo: inv ? (inv.memo || '') : '' };
+      agg[key].qty += (oi.qty || 1);
     });
   });
   return Object.values(agg);
@@ -1501,7 +1502,7 @@ function buildOrderMailUrl(maker, locKey) {
   if (!sup) return null;
   const its = getPendingItemsForMaker(maker);
   const lines = its.length
-    ? its.map(it => `・${it.memo ? it.memo + ' / ' : ''}${it.name} × ${it.qty}`).join('\n')
+    ? its.map(it => `・${it.memo ? it.memo + ' / ' : ''}${it.name}${it.color ? `（${it.color}）` : ''} × ${it.qty}`).join('\n')
     : '・（発注待ちの商品がありません）';
   const loc = DELIVERY_LOCATIONS[locKey] || '';
   const subject = '発注のお願い（株式会社シニアスマイル）';
@@ -1744,7 +1745,7 @@ function renderOrders() {
     const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
     const itemsHtml = orderItems.map(i =>
       `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f5f5f0;font-size:13px;">
-        <span>${escHtml(i.name)}</span>${typeShowQty ? `<span style="font-weight:600;white-space:nowrap;margin-left:8px">${i.qty}個</span>` : ''}
+        <span>${escHtml(i.name)}${i.color ? `<span style="color:#888;font-size:12px;">（${escHtml(i.color)}）</span>` : ''}</span>${typeShowQty ? `<span style="font-weight:600;white-space:nowrap;margin-left:8px">${i.qty}個</span>` : ''}
       </div>`
     ).join('');
     return `<div class="order-card">
@@ -1915,8 +1916,8 @@ function deleteOrder(id) {
 
 let orderItemRows = [];
 
-function addOrderItemRow(name, qty) {
-  const row = { id: Date.now() + Math.random(), name: name || '', qty: qty || 1 };
+function addOrderItemRow(name, qty, color) {
+  const row = { id: Date.now() + Math.random(), name: name || '', qty: qty || 1, color: color || '' };
   orderItemRows.push(row);
   renderOrderItemRows();
 }
@@ -1938,15 +1939,24 @@ function renderOrderItemRows() {
   // 発注・取り寄せは在庫の商品が対象なので、入力候補(datalist)と「在庫から選ぶ」を出す
   const isProductType = (currentOrderType === 'order' || currentOrderType === 'transfer');
   populateProductDatalist();
-  document.getElementById('order-items-list').innerHTML = orderItemRows.map((r, i) =>
-    `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
-      <input type="text" placeholder="${cfg.itemPh}" value="${escHtml(r.name)}" ${isProductType ? 'list="inv-products"' : ''} oninput="orderItemRows[${i}].name=this.value" style="flex:1;padding:8px 10px;font-size:14px;min-width:0;">
-      ${isProductType ? `<button type="button" onclick="openProductPicker(${i})" title="在庫から選ぶ" style="flex:none;border:1px solid #ddd;background:#f8f8f5;border-radius:8px;font-size:16px;cursor:pointer;padding:6px 9px;">📋</button>` : ''}
-      ${cfg.showQty ? `<input type="number" value="${r.qty}" min="1" oninput="orderItemRows[${i}].qty=parseInt(this.value)||1" style="width:54px;padding:8px;font-size:14px;text-align:center;flex:none;">
-      <span style="font-size:12px;color:#888;flex:none;">個</span>` : ''}
-      ${orderItemRows.length > 1 ? `<button onclick="removeOrderItemRow(${r.id})" style="flex:none;border:none;background:none;color:#c0392b;font-size:18px;cursor:pointer;padding:0 2px;">×</button>` : ''}
-    </div>`
-  ).join('');
+  document.getElementById('order-items-list').innerHTML = orderItemRows.map((r, i) => {
+    // 選んだ商品に色（カラー展開）があれば色の選択欄を出す
+    const inv = isProductType ? items.find(it => it.name === r.name && it.colors) : null;
+    const colorOpts = inv ? inv.colors.split('・').filter(Boolean) : [];
+    return `<div style="margin-bottom:8px;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" placeholder="${cfg.itemPh}" value="${escHtml(r.name)}" ${isProductType ? 'list="inv-products"' : ''} oninput="orderItemRows[${i}].name=this.value" onchange="orderItemRows[${i}].name=this.value;renderOrderItemRows()" style="flex:1;padding:8px 10px;font-size:14px;min-width:0;">
+        ${isProductType ? `<button type="button" onclick="openProductPicker(${i})" title="在庫から選ぶ" style="flex:none;border:1px solid #ddd;background:#f8f8f5;border-radius:8px;font-size:16px;cursor:pointer;padding:6px 9px;">📋</button>` : ''}
+        ${cfg.showQty ? `<input type="number" value="${r.qty}" min="1" oninput="orderItemRows[${i}].qty=parseInt(this.value)||1" style="width:54px;padding:8px;font-size:14px;text-align:center;flex:none;">
+        <span style="font-size:12px;color:#888;flex:none;">個</span>` : ''}
+        ${orderItemRows.length > 1 ? `<button onclick="removeOrderItemRow(${r.id})" style="flex:none;border:none;background:none;color:#c0392b;font-size:18px;cursor:pointer;padding:0 2px;">×</button>` : ''}
+      </div>
+      ${colorOpts.length ? `<select onchange="orderItemRows[${i}].color=this.value" style="margin-top:6px;width:100%;padding:7px 8px;font-size:13px;color:#555;">
+        <option value="">🎨 色を選択（任意）</option>
+        ${colorOpts.map(c => `<option value="${escHtml(c)}" ${r.color === c ? 'selected' : ''}>${escHtml(c)}</option>`).join('')}
+      </select>` : ''}
+    </div>`;
+  }).join('');
 }
 
 let pickerTargetRow = -1;
@@ -1973,6 +1983,7 @@ function pickProduct(id) {
   const it = items.find(x => x.id === id);
   if (it && pickerTargetRow >= 0 && orderItemRows[pickerTargetRow]) {
     orderItemRows[pickerTargetRow].name = it.name;
+    orderItemRows[pickerTargetRow].color = '';
     renderOrderItemRows();
   }
   closeModal('modal-product-picker');
@@ -2049,7 +2060,7 @@ function openOrderModal(id) {
   if (currentOrderType === 'order') document.getElementById('order-noorder').checked = o ? !!o.noOrder : false;
   orderItemRows = [];
   const src = o ? (o.orderItems || [{ name: o.itemName, qty: o.qty }]) : [];
-  if (src.length) { src.forEach(i => addOrderItemRow(i.name, i.qty)); }
+  if (src.length) { src.forEach(i => addOrderItemRow(i.name, i.qty, i.color)); }
   else { addOrderItemRow(); }
   openModal('modal-order');
 }
@@ -2076,7 +2087,7 @@ function saveOrder() {
   const instUserId = document.getElementById('order-instructor').value;
   const instStaff = STAFF.find(s => s.userId === instUserId);
   const obj = {
-    orderItems: validItems.map(r => ({ name: r.name.trim(), qty: r.qty })),
+    orderItems: validItems.map(r => ({ name: r.name.trim(), qty: r.qty, color: r.color || '' })),
     instructor: instStaff ? instStaff.name : '',
     instructorUserId: instUserId || '',
     classroom: document.getElementById('order-classroom').value.trim(),
