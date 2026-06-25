@@ -765,7 +765,8 @@ function renderInventory() {
         ${item.isLending ? activeLendsHtml(item.id) : ''}
         <div class="card-actions">
           ${item.isLending
-            ? `<button class="btn btn-sm btn-lend" onclick="openLendModal('${item.id}')">貸し出す</button>`
+            ? `<button class="btn btn-sm btn-lend" onclick="openLendModal('${item.id}')">貸し出す</button>
+               <button class="btn btn-sm btn-order" onclick="orderFromItem('${item.id}')">📦 発注</button>`
             : `<button class="btn btn-sm btn-in" onclick="openMoveModal('${item.id}','in')">入庫</button>
                <button class="btn btn-sm btn-out" onclick="openMoveModal('${item.id}','out')">出庫</button>
                <button class="btn btn-sm btn-stockmove" onclick="openStockMoveModal('${item.id}')">🔁 移動</button>
