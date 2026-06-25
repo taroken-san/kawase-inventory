@@ -1462,7 +1462,7 @@ const DELIVERY_LOCATIONS = {
   '事務所':           '神奈川県横浜市南区六ツ川3丁目114番地4 六ツ川台団地2-6-507',
   '藤沢教室（営業所どめ）': 'ネコサポ FujisawaSST店\n〒251-0043 神奈川県藤沢市辻堂元町6-10-10\n株式会社シニアスマイル　河田佑美',
 };
-const ORDER_MAIL_SIGNATURE = 'S&Sシニアスマイル音楽教室\n川瀬健太郎\nTEL：080-3214-5737\nMail：k_kawase@seniorsmile.jp';
+const ORDER_MAIL_SIGNATURE = '株式会社シニアスマイル\n川瀬健太郎\nTEL：080-3214-5737\nMail：k_kawase@seniorsmile.jp';
 
 // 発注の商品名から在庫商品（メーカー・定価）を引く
 function invByOrderName(name) { return items.find(i => i.name === name); }
@@ -1504,10 +1504,9 @@ function buildOrderMailUrl(maker, locKey) {
     ? its.map(it => `・${it.memo ? it.memo + ' / ' : ''}${it.name} × ${it.qty}`).join('\n')
     : '・（発注待ちの商品がありません）';
   const loc = DELIVERY_LOCATIONS[locKey] || '';
-  const subject = '発注のお願い（S&Sシニアスマイル音楽教室）';
+  const subject = '発注のお願い（株式会社シニアスマイル）';
   const body =
-    `${maker} ${sup.contact}\n\n` +
-    `いつもお世話になっております。\nS&Sシニアスマイル音楽教室です。\n下記のとおり発注をお願いいたします。\n\n` +
+    `いつもお世話になっております。\nシニアスマイルの川瀬です。\n下記のとおり発注をお願いいたします。\n\n` +
     `■ご発注内容\n${lines}\n\n` +
     `■納品先\n${locKey}\n${loc}\n\n` +
     `お手数ですがよろしくお願いいたします。\n\n` +
