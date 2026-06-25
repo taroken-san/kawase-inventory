@@ -297,6 +297,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     </select>
     <label>メーカー</label>
     <input type="text" id="item-maker" placeholder="例：キワヤ商会">
+    <label>色（カラー展開）<span style="font-size:11px;color:#aaa;font-weight:400;margin-left:6px">複数色は「・」で区切る（任意）</span></label>
+    <input type="text" id="item-colors" placeholder="例：BK・NV・DG・CR・BR">
     <label>定価（税込）</label>
     <input type="number" id="item-price" value="" min="0" placeholder="例：25300">
     <label>販売価格（税込）<span style="font-size:11px;color:#aaa;font-weight:400;margin-left:6px">定価と同じ場合は空欄でOK</span></label>
@@ -716,7 +718,7 @@ function renderInventory() {
     const priceDisplay = item.salePrice
       ? `<span style="font-weight:600;color:#2d6a4f;">販売 ¥${Number(item.salePrice).toLocaleString()}</span><span style="color:#bbb;font-size:11px;margin-left:4px;">定価 ¥${Number(item.price||0).toLocaleString()}</span>`
       : (item.price ? `¥${Number(item.price).toLocaleString()}` : '');
-    const metaText = [item.category ? 'カテゴリ：' + escHtml(item.category) : '', item.maker ? escHtml(item.maker) : '', item.memo ? escHtml(item.memo) : ''].filter(Boolean).join(' · ');
+    const metaText = [item.category ? 'カテゴリ：' + escHtml(item.category) : '', item.maker ? escHtml(item.maker) : '', item.colors ? '色：' + escHtml(item.colors) : '', item.memo ? escHtml(item.memo) : ''].filter(Boolean).join(' · ');
     return `<div class="card">
       <div class="card-header" onclick="toggleCard('${item.id}')" style="cursor:pointer;padding-bottom:10px;">
         <div class="item-thumb">${item.imageUrl ? `<img src="${escHtml(item.imageUrl)}" alt="${escHtml(item.name)}" loading="lazy">` : '写真'}</div>
@@ -804,6 +806,7 @@ function renderCatalog() {
         <div class="catalog-maker">${escHtml(item.maker || item.category || '')}</div>
         <div class="catalog-price">${formatPrice(itemPrice(item))}</div>
         ${item.setPrice ? `<div class="catalog-set">🎁 ${escHtml(item.setPrice)}</div>` : ''}
+        ${item.colors ? `<div class="catalog-set" style="color:#555;">🎨 全${item.colors.split('・').filter(Boolean).length}色：${escHtml(item.colors)}</div>` : ''}
         ${item.appealText ? `<div class="catalog-appeal">${escHtml(item.appealText)}</div>` : ''}
         ${showStock ? `<div class="catalog-stock">${stockText}</div>` : ''}
       </div>
@@ -880,6 +883,7 @@ function openAddModal() {
   document.getElementById('item-name').value = '';
   document.getElementById('item-category').value = 'ウクレレ';
   document.getElementById('item-maker').value = '';
+  document.getElementById('item-colors').value = '';
   document.getElementById('item-price').value = '';
   document.getElementById('item-sale-price').value = '';
   document.getElementById('item-set-price').value = '';
@@ -903,6 +907,7 @@ function openEditModal(id) {
   document.getElementById('item-name').value = item.name;
   document.getElementById('item-category').value = item.category;
   document.getElementById('item-maker').value = item.maker || '';
+  document.getElementById('item-colors').value = item.colors || '';
   document.getElementById('item-price').value = item.price || '';
   document.getElementById('item-sale-price').value = item.salePrice || '';
   document.getElementById('item-set-price').value = item.setPrice || '';
@@ -934,6 +939,7 @@ function saveItem() {
     name,
     category: document.getElementById('item-category').value,
     maker: document.getElementById('item-maker').value.trim(),
+    colors: document.getElementById('item-colors').value.trim(),
     price: parseInt(document.getElementById('item-price').value) || 0,
     salePrice: parseInt(document.getElementById('item-sale-price').value) || 0,
     setPrice: document.getElementById('item-set-price').value.trim(),
