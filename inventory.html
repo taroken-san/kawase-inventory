@@ -34,6 +34,7 @@ header h1 { font-size: 17px; font-weight: 600; flex: 1; }
 .btn-in { background: #e8f5e9; color: #1b5e20; }
 .btn-out { background: #fff3e0; color: #e65100; }
 .btn-order { background: #ede7f6; color: #4527a0; }
+.btn-stockmove { background: #e6f1fb; color: #185fa5; }
 .card { background: #fff; border-radius: 10px; border: 1px solid #e0e0d8; margin-bottom: 10px; overflow: hidden; }
 .card-header { padding: 11px 14px 0; display: flex; align-items: center; gap: 8px; }
 .item-thumb { width: 46px; height: 46px; border-radius: 7px; background: #f7f7f2; border: 1px solid #eee; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; color: #bbb; font-size: 10px; }
@@ -466,6 +467,32 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   </div>
 </div>
 
+<!-- 教室間移動モーダル -->
+<div class="modal-backdrop" id="modal-stockmove" onclick="closeModal('modal-stockmove')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>🔁 教室間で移動</h2>
+    <input type="hidden" id="smove-id">
+    <label>移動元（在庫がある教室）</label>
+    <div class="store-select-grid" id="smove-from-grid"></div>
+    <label style="margin-top:14px">移動先</label>
+    <div class="store-select-grid" id="smove-to-grid"></div>
+    <label style="margin-top:14px">数量</label>
+    <div class="qty-row">
+      <button onclick="adjustSmoveQty(-1)">−</button>
+      <div class="qty-display" id="smove-qty-display">1</div>
+      <button onclick="adjustSmoveQty(1)">＋</button>
+      <input type="number" id="smove-qty" value="1" min="1" style="display:none">
+    </div>
+    <p id="smove-info" style="font-size:12px;color:#888;margin-top:6px;"></p>
+    <label>メモ（任意）</label>
+    <textarea id="smove-memo" rows="2" placeholder="例：横浜に偏っていたため"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('modal-stockmove')">キャンセル</button>
+      <button class="btn btn-primary btn-save" onclick="saveStockMove()" style="margin-bottom:0">移動する</button>
+    </div>
+  </div>
+</div>
+
 <!-- 取り寄せ元選択モーダル -->
 <div class="modal-backdrop" id="modal-transfer" onclick="closeModal('modal-transfer')">
   <div class="modal" onclick="event.stopPropagation()">
@@ -741,6 +768,7 @@ function renderInventory() {
             ? `<button class="btn btn-sm btn-lend" onclick="openLendModal('${item.id}')">貸し出す</button>`
             : `<button class="btn btn-sm btn-in" onclick="openMoveModal('${item.id}','in')">入庫</button>
                <button class="btn btn-sm btn-out" onclick="openMoveModal('${item.id}','out')">出庫</button>
+               <button class="btn btn-sm btn-stockmove" onclick="openStockMoveModal('${item.id}')">🔁 移動</button>
                <button class="btn btn-sm btn-order" onclick="orderFromItem('${item.id}')">📦 発注</button>`}
           <button class="btn btn-sm btn-edit" onclick="openEditModal('${item.id}')">編集</button>
           ${adminMode ? `<button class="btn btn-sm btn-delete" onclick="deleteItem('${item.id}')">削除</button>` : ''}
@@ -850,9 +878,19 @@ function renderHistory() {
     return;
   }
   list.innerHTML = [...history].reverse().map(h => {
-    const sign = h.type === 'in' ? '+' : '−';
     const d = new Date(h.ts);
     const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if (h.type === 'move') {
+      return `<div class="history-item">
+        <div class="hist-dot" style="background:#185fa5;"></div>
+        <div class="hist-info">
+          <div class="hist-name">${escHtml(h.name)}</div>
+          <div class="hist-sub">${dateStr} · 🔁 ${escHtml(h.fromStore)}→${escHtml(h.toStore)}${h.memo ? ' · ' + escHtml(h.memo) : ''}</div>
+        </div>
+        <div class="hist-qty" style="color:#185fa5;">${h.qty}</div>
+      </div>`;
+    }
+    const sign = h.type === 'in' ? '+' : '−';
     return `<div class="history-item">
       <div class="hist-dot ${h.type}"></div>
       <div class="hist-info">
@@ -1047,6 +1085,61 @@ function adjustMoveQty(delta) {
   const val = Math.max(1, (parseInt(input.value) || 1) + delta);
   input.value = val;
   document.getElementById('move-qty-display').textContent = val;
+}
+
+// ===== 教室間移動（ワンタップ）=====
+let smoveFrom = null, smoveTo = null;
+function openStockMoveModal(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  document.getElementById('smove-id').value = id;
+  document.getElementById('smove-qty').value = 1;
+  document.getElementById('smove-qty-display').textContent = 1;
+  document.getElementById('smove-memo').value = '';
+  const withStock = STORES.filter(s => storeQty(item, s) > 0);
+  smoveFrom = (activeStore !== 'all' && storeQty(item, activeStore) > 0) ? activeStore : (withStock[0] || null);
+  smoveTo = STORES.find(s => s !== smoveFrom) || null;
+  renderSmoveGrids(item);
+  openModal('modal-stockmove');
+}
+function renderSmoveGrids(item) {
+  const fromStores = STORES.filter(s => storeQty(item, s) > 0);
+  document.getElementById('smove-from-grid').innerHTML = fromStores.length
+    ? fromStores.map(s => `<button class="store-select-btn ${smoveFrom === s ? 'selected' : ''}" onclick="selectSmoveFrom('${s}')">${s}<br><span style="font-size:11px;opacity:0.7">在庫 ${storeQty(item, s)}個</span></button>`).join('')
+    : '<span style="font-size:12px;color:#c0392b;">在庫がある教室がありません</span>';
+  document.getElementById('smove-to-grid').innerHTML = STORES.filter(s => s !== smoveFrom)
+    .map(s => `<button class="store-select-btn ${smoveTo === s ? 'selected' : ''}" onclick="selectSmoveTo('${s}')">${s}<br><span style="font-size:11px;opacity:0.7">現在 ${storeQty(item, s)}個</span></button>`).join('');
+  updateSmoveInfo(item);
+}
+function currentSmoveItem() { return items.find(i => i.id === document.getElementById('smove-id').value); }
+function selectSmoveFrom(s) { smoveFrom = s; if (smoveTo === s) smoveTo = STORES.find(x => x !== s) || null; renderSmoveGrids(currentSmoveItem()); }
+function selectSmoveTo(s) { smoveTo = s; renderSmoveGrids(currentSmoveItem()); }
+function updateSmoveInfo(item) {
+  const el = document.getElementById('smove-info');
+  if (item && smoveFrom && smoveTo) el.textContent = `${smoveFrom}（${storeQty(item, smoveFrom)}個）→ ${smoveTo}（${storeQty(item, smoveTo)}個）`;
+  else el.textContent = '';
+}
+function adjustSmoveQty(delta) {
+  const input = document.getElementById('smove-qty');
+  const val = Math.max(1, (parseInt(input.value) || 1) + delta);
+  input.value = val;
+  document.getElementById('smove-qty-display').textContent = val;
+}
+function saveStockMove() {
+  const id = document.getElementById('smove-id').value;
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  const qty = parseInt(document.getElementById('smove-qty').value) || 0;
+  if (!smoveFrom || !smoveTo) { alert('移動元と移動先を選んでください'); return; }
+  if (smoveFrom === smoveTo) { alert('移動元と移動先が同じです'); return; }
+  if (qty <= 0) { alert('数量を入力してください'); return; }
+  if (storeQty(item, smoveFrom) < qty) { alert(`${smoveFrom}の在庫が足りません（現在: ${storeQty(item, smoveFrom)}個）`); return; }
+  item.locations[smoveFrom] = (item.locations[smoveFrom] || 0) - qty;
+  item.locations[smoveTo] = (item.locations[smoveTo] || 0) + qty;
+  history.push({ id, name: item.name, type: 'move', qty, fromStore: smoveFrom, toStore: smoveTo, store: `${smoveFrom}→${smoveTo}`, memo: document.getElementById('smove-memo').value.trim(), ts: Date.now() });
+  save();
+  closeModal('modal-stockmove');
+  renderInventory();
 }
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
