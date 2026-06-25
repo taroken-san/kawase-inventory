@@ -386,6 +386,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   </div>
 </div>
 
+<!-- 発注メール作成（納品先選択） -->
+<div class="modal-backdrop" id="modal-order-mail" onclick="closeModal('modal-order-mail')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>✉ 発注メールを作成</h2>
+    <p id="order-mail-maker" style="font-size:13px;color:#555;margin:0 0 4px;"></p>
+    <p style="font-size:12px;color:#888;margin:0 0 12px;">納品先を選ぶと、発注待ちの商品を入れたメール下書きが開きます。送信前に内容を確認してください。</p>
+    <div id="order-mail-locations"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('modal-order-mail')" style="margin-bottom:0">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- 送料無料ライン設定（管理モード） -->
 <div class="modal-backdrop" id="modal-threshold" onclick="closeModal('modal-threshold')">
   <div class="modal" onclick="event.stopPropagation()">
@@ -1326,8 +1339,76 @@ function switchTab(name, el) {
   addBtn.style.display = name === 'inventory' ? '' : 'none';
 }
 
+// 発注先（メーカー）ごとのメール宛先・担当者
+const SUPPLIERS = {
+  'キワヤ商会': { contact: '宮谷様', email: 'order@kiwaya.com' },
+  'フジゲン':   { contact: '一宮様', email: 'ichimiya@fujigen.co.jp' },
+  '日本娯楽':   { contact: '筧様',   email: 'kakei@nihongoraku.co.jp' },
+  'ASOVIVA':    { contact: '山崎様', email: 'info@asobi-sanshin.com' },
+};
+// 納品先の候補（横浜・町田・事務所）
+const DELIVERY_LOCATIONS = {
+  '横浜教室':     '〒221-0835 神奈川県横浜市神奈川区鶴屋町2-21-9 三善ビルB1F',
+  '町田駅前教室': '〒194-0013 東京都町田市原町田4-2-15 丸昭エイトビル5階',
+  '事務所':       '神奈川県横浜市南区六ツ川3丁目114番地4 六ツ川台団地2-6-507',
+};
+const ORDER_MAIL_SIGNATURE = 'S&Sシニアスマイル音楽教室\n川瀬健太郎\nTEL：080-3214-5737\nMail：k_kawase@seniorsmile.jp';
+
 // 発注の商品名から在庫商品（メーカー・定価）を引く
 function invByOrderName(name) { return items.find(i => i.name === name); }
+
+// 発注待ちのうち、指定メーカーの商品を集約（品番付き）
+function getPendingItemsForMaker(maker) {
+  const pending = orders.filter(o => (o.type || 'order') === 'order' && !o.noOrder && o.status === '依頼受付');
+  const agg = {};
+  pending.forEach(o => {
+    (o.orderItems || [{ name: o.itemName, qty: o.qty }]).forEach(oi => {
+      const inv = invByOrderName(oi.name);
+      const m = (inv && inv.maker) ? inv.maker : '不明';
+      if (m !== maker) return;
+      if (!agg[oi.name]) agg[oi.name] = { name: oi.name, qty: 0, memo: inv ? (inv.memo || '') : '' };
+      agg[oi.name].qty += (oi.qty || 1);
+    });
+  });
+  return Object.values(agg);
+}
+
+let currentMailMaker = '';
+function openOrderMailPicker(maker) {
+  if (!SUPPLIERS[maker]) return;
+  currentMailMaker = maker;
+  const sup = SUPPLIERS[maker];
+  const its = getPendingItemsForMaker(maker);
+  document.getElementById('order-mail-maker').textContent = `${maker} ${sup.contact}（${sup.email}）／ 発注待ち ${its.length} 品目`;
+  document.getElementById('order-mail-locations').innerHTML = Object.keys(DELIVERY_LOCATIONS).map(k =>
+    `<button class="store-select-btn" style="text-align:left;margin-bottom:8px;width:100%;" onclick="sendOrderMail('${escHtml(k)}')">📍 ${escHtml(k)}<br><span style="font-size:11px;opacity:0.7">${escHtml(DELIVERY_LOCATIONS[k])}</span></button>`
+  ).join('');
+  openModal('modal-order-mail');
+}
+
+function buildOrderMailUrl(maker, locKey) {
+  const sup = SUPPLIERS[maker];
+  if (!sup) return null;
+  const its = getPendingItemsForMaker(maker);
+  const lines = its.length
+    ? its.map(it => `・${it.memo ? it.memo + ' / ' : ''}${it.name} × ${it.qty}`).join('\n')
+    : '・（発注待ちの商品がありません）';
+  const loc = DELIVERY_LOCATIONS[locKey] || '';
+  const subject = '発注のお願い（S&Sシニアスマイル音楽教室）';
+  const body =
+    `${maker} ${sup.contact}\n\n` +
+    `いつもお世話になっております。\nS&Sシニアスマイル音楽教室です。\n下記のとおり発注をお願いいたします。\n\n` +
+    `■ご発注内容\n${lines}\n\n` +
+    `■納品先\n${locKey}\n${loc}\n\n` +
+    `お手数ですがよろしくお願いいたします。\n\n` +
+    `${ORDER_MAIL_SIGNATURE}`;
+  return `mailto:${sup.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function sendOrderMail(locKey) {
+  const url = buildOrderMailUrl(currentMailMaker, locKey);
+  if (url) { closeModal('modal-order-mail'); window.location.href = url; }
+}
 function orderMakers(o) {
   const its = o.orderItems || [{ name: o.itemName, qty: o.qty }];
   return [...new Set(its.map(oi => { const inv = invByOrderName(oi.name); return (inv && inv.maker) ? inv.maker : '不明'; }))];
@@ -1398,6 +1479,7 @@ function renderOrderSummary() {
       ${bar}
       ${statusLine}
       <div style="font-size:11px;color:#666;margin-top:6px;">納品先：${escHtml(stores)}</div>
+      ${SUPPLIERS[m] && cnt > 0 ? `<button onclick="event.stopPropagation();openOrderMailPicker('${escHtml(m)}')" style="margin-top:8px;width:100%;border:1px solid #185fa5;background:#fff;color:#185fa5;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;padding:6px;">✉ 発注メール作成</button>` : ''}
     </div>`;
   }).join('');
 
