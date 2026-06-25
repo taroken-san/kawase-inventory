@@ -613,7 +613,9 @@ function renderInventory() {
   const inStockOnly = document.getElementById('instock-only').checked;
   const filtered = items.filter(i => {
     const matchQ = !q || i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q);
-    const matchCat = activeCat === 'all' || i.category === activeCat;
+    const matchCat = activeCat === 'all' ? true
+      : activeCat === '__lending__' ? !!i.isLending
+      : i.category === activeCat;
     const qty = activeStore === 'all' ? totalQty(i) : storeQty(i, activeStore);
     const matchStock = !inStockOnly || qty > 0;
     return matchQ && matchCat && matchStock;
@@ -622,12 +624,17 @@ function renderInventory() {
     return a.name.localeCompare(b.name, 'ja');
   });
 
-  const cats = [...new Set(items.map(i => i.category))];
+  const cats = [...new Set(items.map(i => i.category))].filter(c => c !== '貸出用');
   const filterBar = document.getElementById('filter-bar');
-  filterBar.innerHTML = ['all', ...cats].map(c => {
+  const baseChips = ['all', ...cats].map(c => {
     const label = c === 'all' ? 'すべて' : c;
     return `<div class="filter-chip ${activeCat === c ? 'active' : ''}" onclick="setCat('${c}')">${label}</div>`;
-  }).join('');
+  });
+  // 貸出用（isLendingがONの商品）を絞り込むフィルタ。貸出商品がある時だけ表示。
+  if (items.some(i => i.isLending)) {
+    baseChips.push(`<div class="filter-chip ${activeCat === '__lending__' ? 'active' : ''}" onclick="setCat('__lending__')">貸出用</div>`);
+  }
+  filterBar.innerHTML = baseChips.join('');
 
   // 棚卸しExcel出力は「すべて」表示時のみ
   document.getElementById('export-wrap').style.display = activeCat === 'all' ? '' : 'none';
