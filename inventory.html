@@ -181,7 +181,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 <div class="tab-bar">
   <button class="active" onclick="switchTab('inventory', this)">在庫一覧</button>
   <button onclick="switchTab('catalog', this)">📖 カタログ</button>
-  <button onclick="switchTab('orders', this)">発注管理</button>
+  <button id="tab-orders" onclick="switchTab('orders', this)">発注管理</button>
   <button onclick="switchTab('history', this)">入出庫履歴</button>
 </div>
 
@@ -230,6 +230,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 
 <div id="screen-orders" class="screen">
   <button class="btn btn-primary" onclick="openOrderModal()">+ 発注依頼を追加</button>
+  <div id="order-alerts"></div>
   <div id="order-summary"></div>
   <div class="filter-bar" id="order-filter-bar"></div>
   <div id="order-list"></div>
@@ -1501,6 +1502,68 @@ function filterOrderMaker(m) {
   renderOrders();
 }
 
+// ---- 発注忘れ防止アラート ----
+const ALERT_DUE_DAYS = 3;   // 受け渡し希望日が何日前から「迫る」とするか
+const ALERT_STALE_DAYS = 7; // 依頼受付のまま何日で「滞留」とするか
+function orderWho(o) { return o.student ? o.student : (o.instructor || '依頼'); }
+
+function computeOrderAlerts() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const DAY = 86400000;
+  // ① 送料無料ライン到達
+  const sum = computeSupplierSummary();
+  const reached = Object.keys(sum).filter(m => {
+    const lim = Number(supplierThresholds[m] || 0);
+    return lim > 0 && sum[m].amount >= lim;
+  });
+  // ②③ 希望日・滞留（渡し済み以外が対象）
+  const dueSoon = [], stale = [];
+  orders.forEach(o => {
+    if (o.status === '渡し済み') return;
+    if (o.expectedDate) {
+      const d = new Date(o.expectedDate + 'T00:00:00');
+      if (!isNaN(d)) {
+        const diff = Math.round((d - today) / DAY);
+        if (diff <= ALERT_DUE_DAYS) dueSoon.push({ o, diff });
+      }
+    }
+    if (o.status === '依頼受付' && o.createdAt) {
+      const c = new Date(o.createdAt);
+      const cday = new Date(c.getFullYear(), c.getMonth(), c.getDate());
+      const age = Math.floor((today - cday) / DAY);
+      if (age >= ALERT_STALE_DAYS) stale.push({ o, age });
+    }
+  });
+  return { reached, dueSoon, stale };
+}
+
+function alertBox(bg, border, color, icon, text) {
+  return `<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:9px 11px;margin-bottom:8px;font-size:12px;color:${color};line-height:1.5;"><b>${icon} ${text}</b></div>`;
+}
+
+function renderOrderAlerts() {
+  const el = document.getElementById('order-alerts');
+  if (!el) return;
+  const a = computeOrderAlerts();
+  const blocks = [];
+  if (a.reached.length) {
+    blocks.push(alertBox('#e1f5ee', '#9fe1cb', '#0f6e56', '🔔', `発注OK：${escHtml(a.reached.join('・'))}（送料無料ライン達成）`));
+  }
+  if (a.dueSoon.length) {
+    const txt = a.dueSoon.map(({ o, diff }) => `${escHtml(orderWho(o))}（希望${escHtml(o.expectedDate)}${diff < 0 ? '・超過' : diff === 0 ? '・本日' : ''}）`).join('、');
+    blocks.push(alertBox('#fcebeb', '#f09595', '#a32d2d', '⚠️', `受け渡し希望日が近い/過ぎ：${txt}`));
+  }
+  if (a.stale.length) {
+    const txt = a.stale.map(({ o, age }) => `${escHtml(orderWho(o))}（${age}日経過）`).join('、');
+    blocks.push(alertBox('#faeeda', '#fac775', '#854f0b', '⏰', `依頼受付のまま滞留：${txt}`));
+  }
+  el.innerHTML = blocks.join('');
+  const total = a.reached.length + a.dueSoon.length + a.stale.length;
+  const tab = document.getElementById('tab-orders');
+  if (tab) tab.innerHTML = '発注管理' + (total > 0 ? ` <span style="background:#e24b4a;color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;font-weight:700;">${total}</span>` : '');
+}
+
 let thresholdMakers = [];
 function openThresholdModal() {
   if (!adminMode) return;
@@ -1530,6 +1593,7 @@ function saveThresholds() {
 }
 
 function renderOrders() {
+  renderOrderAlerts();
   renderOrderSummary();
   // 上部の店舗フィルタを発注一覧にも反映（受け取り先、取り寄せは元店舗も対象）
   const byStore = activeStore === 'all'
