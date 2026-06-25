@@ -1354,9 +1354,10 @@ const SUPPLIERS = {
 };
 // 納品先の候補（横浜・町田・事務所）
 const DELIVERY_LOCATIONS = {
-  '横浜教室':     '〒221-0835 神奈川県横浜市神奈川区鶴屋町2-21-9 三善ビルB1F',
-  '町田駅前教室': '〒194-0013 東京都町田市原町田4-2-15 丸昭エイトビル5階',
-  '事務所':       '神奈川県横浜市南区六ツ川3丁目114番地4 六ツ川台団地2-6-507',
+  '横浜教室':         '〒221-0835 神奈川県横浜市神奈川区鶴屋町2-21-9 三善ビルB1F',
+  '町田駅前教室':     '〒194-0013 東京都町田市原町田4-2-15 丸昭エイトビル5階',
+  '事務所':           '神奈川県横浜市南区六ツ川3丁目114番地4 六ツ川台団地2-6-507',
+  '藤沢教室（営業所どめ）': 'ネコサポ FujisawaSST店\n〒251-0043 神奈川県藤沢市辻堂元町6-10-10\n株式会社シニアスマイル　河田佑美',
 };
 const ORDER_MAIL_SIGNATURE = 'S&Sシニアスマイル音楽教室\n川瀬健太郎\nTEL：080-3214-5737\nMail：k_kawase@seniorsmile.jp';
 
@@ -1387,7 +1388,7 @@ function openOrderMailPicker(maker) {
   const its = getPendingItemsForMaker(maker);
   document.getElementById('order-mail-maker').textContent = `${maker} ${sup.contact}（${sup.email}）／ 発注待ち ${its.length} 品目`;
   document.getElementById('order-mail-locations').innerHTML = Object.keys(DELIVERY_LOCATIONS).map(k =>
-    `<button class="store-select-btn" style="text-align:left;margin-bottom:8px;width:100%;" onclick="sendOrderMail('${escHtml(k)}')">📍 ${escHtml(k)}<br><span style="font-size:11px;opacity:0.7">${escHtml(DELIVERY_LOCATIONS[k])}</span></button>`
+    `<button class="store-select-btn" style="text-align:left;margin-bottom:8px;width:100%;" onclick="sendOrderMail('${escHtml(k)}')">📍 ${escHtml(k)}<br><span style="font-size:11px;opacity:0.7">${escHtml(DELIVERY_LOCATIONS[k]).replace(/\n/g, '<br>')}</span></button>`
   ).join('');
   openModal('modal-order-mail');
 }
