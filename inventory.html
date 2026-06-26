@@ -1952,7 +1952,7 @@ function renderOrderItemRows() {
         ${orderItemRows.length > 1 ? `<button onclick="removeOrderItemRow(${r.id})" style="flex:none;border:none;background:none;color:#c0392b;font-size:18px;cursor:pointer;padding:0 2px;">×</button>` : ''}
       </div>
       ${colorOpts.length ? `<select onchange="orderItemRows[${i}].color=this.value" style="margin-top:6px;width:100%;padding:7px 8px;font-size:13px;color:#555;">
-        <option value="">🎨 色を選択（任意）</option>
+        <option value="">🎨 色を選択（必須）</option>
         ${colorOpts.map(c => `<option value="${escHtml(c)}" ${r.color === c ? 'selected' : ''}>${escHtml(c)}</option>`).join('')}
       </select>` : ''}
     </div>`;
@@ -2083,6 +2083,11 @@ async function sendNotify(type, message, userId) {
 function saveOrder() {
   const validItems = orderItemRows.filter(r => r.name.trim());
   if (!validItems.length) { alert('商品名を1つ以上入力してください'); return; }
+  const missingColor = validItems.find(r => {
+    const inv = items.find(it => it.name === r.name.trim());
+    return inv && inv.colors && !r.color;
+  });
+  if (missingColor) { alert('「' + missingColor.name.trim() + '」の色・柄を選択してください'); return; }
   const id = document.getElementById('order-edit-id').value;
   const instUserId = document.getElementById('order-instructor').value;
   const instStaff = STAFF.find(s => s.userId === instUserId);
