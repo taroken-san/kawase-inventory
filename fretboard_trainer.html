@@ -314,10 +314,17 @@
     </div>
   </div>
   <div class="field" id="scalePosField" style="display:none;">
-    <label>ポジション（3NPS）</label>
+    <label>ポジション方式</label>
+    <div class="seg" id="scaleSchemeSeg">
+      <button data-v="3nps" class="on">3ノート/弦</button>
+      <button data-v="caged">CAGED</button>
+    </div>
+  </div>
+  <div class="field" id="scalePosNavField" style="display:none;">
+    <label>ポジション</label>
     <span style="display:flex;align-items:center;gap:6px;">
       <button id="spPrev">◀</button>
-      <b id="spInfo" style="min-width:48px;text-align:center;">-</b>
+      <b id="spInfo" style="min-width:64px;text-align:center;">-</b>
       <button id="spNext">▶</button>
     </span>
   </div>
@@ -413,7 +420,7 @@ const state = {
   chord:{ type:"maj7", rootPc:0, category:"shell", display:"color",
           guideTone:false, voicings:[], idx:0 },
   // scale mode (第三フェーズ)
-  scale:{ rootPc:0, type:"ionian", view:"all", posIdx:0, positions:[],
+  scale:{ rootPc:0, type:"ionian", view:"all", posIdx:0, positions:[], posScheme:"3nps",
           chordType:"", chordRootPc:0 },
   // progression mode
   prog:{ presetIdx:0, keyPc:0, mode:"major", chords:[], songs:[],
@@ -442,6 +449,7 @@ function persistScore(){
                  sound:state.sound, volume:state.volume,
                  chord:{ type:state.chord.type, category:state.chord.category, display:state.chord.display },
                  scale:{ rootPc:state.scale.rootPc, type:state.scale.type, view:state.scale.view,
+                         posScheme:state.scale.posScheme,
                          chordType:state.scale.chordType, chordRootPc:state.scale.chordRootPc },
                  prog:{ display:state.prog.display, pattern:state.prog.pattern, scaleSel:state.prog.scaleSel },
                  quiz:{ fretMin:state.quizFretMin, fretMax:state.quizFretMax,
@@ -1770,7 +1778,7 @@ function drawQuizInv(){
    スケール／ポジション（第三フェーズ・3ノート・パー・ストリング）
    ============================================================ */
 function scaleNextMidi(midi, pcset){ let m=midi+1; while(!pcset.has(((m%12)+12)%12)) m++; return m; }
-function buildScalePositions(){
+function build3npsPositions(){
   const sc=state.scale, ivs=SCALES[sc.type];
   const pcset=new Set(ivs.map(iv=>(sc.rootPc+iv)%12));
   // 6弦(低E)上のスケール音＝各ポジションの開始音
@@ -1787,8 +1795,41 @@ function buildScalePositions(){
         m=scaleNextMidi(m,pcset);
       }
     }
-    positions.push(notes);
+    positions.push({notes, label:"Pos "+(p+1)});
   }
+  return positions;
+}
+// CAGED: 5つの開放コード形状(C/A/G/E/D)の根音位置を基準にした5ボックス。
+// 各ボックスの境界(フレット範囲)はメジャートライアド形状の幾何から導出（下記offsetは
+// 開放C/A/G/E/Dコードの実際の押弦位置から逆算し、隣接ボックスが隙間なく連鎖することを検算済み）。
+// 例：ルートCなら C形=0-3fr, A形=3-5fr, G形=5-8fr, E形=8-10fr, D形=10-13fr。
+const CAGED_SHAPES=[
+  {name:"Cシェイプ", lo:-3, hi:0},
+  {name:"Aシェイプ", lo:0,  hi:2},
+  {name:"Gシェイプ", lo:2,  hi:5},
+  {name:"Eシェイプ", lo:5,  hi:7},
+  {name:"Dシェイプ", lo:7,  hi:10},
+];
+function buildCagedPositions(){
+  const sc=state.scale, ivs=SCALES[sc.type];
+  const pcset=new Set(ivs.map(iv=>(sc.rootPc+iv)%12));
+  const aStringOpenPc=OPEN_MIDI[1]%12; // 5弦(A)の開放pc=9
+  const baseFret=((sc.rootPc-aStringOpenPc)%12+12)%12; // Cシェイプの上端＝ルートがA弦に現れるフレット
+  return CAGED_SHAPES.map(shape=>{
+    // lo/hiとも指板範囲[0,frets]にクランプ（範囲外に押し出された時に隙間が出ないように両端揃える）
+    let lo=Math.min(state.frets, Math.max(0, baseFret+shape.lo));
+    let hi=Math.min(state.frets, Math.max(0, baseFret+shape.hi));
+    if(hi<lo) hi=lo;
+    const notes=[];
+    for(let s=0;s<6;s++) for(let f=lo;f<=hi;f++){
+      const pc=pcAt(s,f); if(pcset.has(pc)) notes.push({s,f,midi:OPEN_MIDI[s]+f});
+    }
+    return {notes, label:shape.name, lo, hi};
+  });
+}
+function buildScalePositions(){
+  const sc=state.scale;
+  const positions = sc.posScheme==="caged"? buildCagedPositions() : build3npsPositions();
   sc.positions=positions;
   if(sc.posIdx>=positions.length) sc.posIdx=0;
 }
@@ -1839,8 +1880,8 @@ function drawScale(){
     for(let s=0;s<6;s++) for(let f=0;f<=state.frets;f++){
       const pc=pcAt(s,f); if(pcset.has(pc)) plot(s,f,OPEN_MIDI[s]+f,true);
     }
-    const pos=sc.positions[sc.posIdx]||[];
-    pos.forEach(n=>plot(n.s,n.f,n.midi,false));
+    const pos=sc.positions[sc.posIdx];
+    if(pos) pos.notes.forEach(n=>plot(n.s,n.f,n.midi,false));
   }
 }
 function scaleName(){ return spellByRoot(state.scale.rootPc)+" "+SCALE_JP[state.scale.type]; }
@@ -1851,17 +1892,22 @@ function updateScaleInfo(){
   const ch=scaleOverlayChord();
   const chTxt = ch? `　当て音＝<span class="hl">${spellByRoot(ch.rootPc,sc.rootPc)+CHORDS[ch.quality].label}</span> のコードトーン（濃色）`:"";
   if(sc.view==="pos"){
-    const pos=sc.positions[sc.posIdx]||[];
-    const fr=pos.map(n=>n.f).filter(f=>f>0);
+    const pos=sc.positions[sc.posIdx];
+    const notes=pos? pos.notes : [];
+    const fr=notes.map(n=>n.f).filter(f=>f>0);
     const range=fr.length? Math.min.apply(null,fr)+"〜"+Math.max.apply(null,fr)+"fr":"";
-    el("spInfo").textContent=(sc.posIdx+1)+"/"+sc.positions.length;
-    setPrompt(`<span class="hl">${scaleName()}</span> ／ 3NPS ポジション ${sc.posIdx+1}（${range}）${chTxt}${h}`);
+    const label=pos? pos.label : "-";
+    const schemeName = sc.posScheme==="caged"? "CAGED" : "3NPS";
+    el("spInfo").textContent=label;
+    setPrompt(`<span class="hl">${scaleName()}</span> ／ ${schemeName} ${label}（${range}）${chTxt}${h}`);
   } else {
     setPrompt(`<span class="hl">${scaleName()}</span> ／ 全体表示（赤=R）${chTxt}${h}`);
   }
 }
 function setupScaleMode(){
-  el("scalePosField").style.display = state.scale.view==="pos"?"flex":"none";
+  const sc=state.scale;
+  el("scalePosField").style.display = sc.view==="pos"?"flex":"none";
+  el("scalePosNavField").style.display = sc.view==="pos"?"flex":"none";
   buildScalePositions(); updateScaleInfo(); draw();
 }
 
@@ -2118,7 +2164,14 @@ document.querySelectorAll("#scaleViewSeg button").forEach(b=>
     state.scale.view=b.dataset.v;
     document.querySelectorAll("#scaleViewSeg button").forEach(x=>x.classList.toggle("on",x===b));
     el("scalePosField").style.display = state.scale.view==="pos"?"flex":"none";
+    el("scalePosNavField").style.display = state.scale.view==="pos"?"flex":"none";
     updateScaleInfo(); draw();
+  }));
+document.querySelectorAll("#scaleSchemeSeg button").forEach(b=>
+  b.addEventListener("click",()=>{
+    state.scale.posScheme=b.dataset.v; state.scale.posIdx=0;
+    document.querySelectorAll("#scaleSchemeSeg button").forEach(x=>x.classList.toggle("on",x===b));
+    buildScalePositions(); updateScaleInfo(); draw();
   }));
 el("spPrev").addEventListener("click",()=>{ const s=state.scale; if(!s.positions.length) return;
   s.posIdx=(s.posIdx-1+s.positions.length)%s.positions.length; updateScaleInfo(); draw(); });
@@ -2196,6 +2249,7 @@ function applySettingsToUI(){
   document.querySelectorAll("#chordDisp button").forEach(x=>x.classList.toggle("on",x.dataset.v===state.chord.display));
   document.querySelectorAll("#progLayout button").forEach(x=>x.classList.toggle("on",x.dataset.v===state.prog.display));
   document.querySelectorAll("#scaleViewSeg button").forEach(x=>x.classList.toggle("on",x.dataset.v===state.scale.view));
+  document.querySelectorAll("#scaleSchemeSeg button").forEach(x=>x.classList.toggle("on",x.dataset.v===state.scale.posScheme));
   el("progPattern").value=state.prog.pattern;
   el("progScale").value=state.prog.scaleSel;
   // クイズ出題範囲・転回フィルタの復元
