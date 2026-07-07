@@ -407,7 +407,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   <div class="modal" onclick="event.stopPropagation()">
     <h2>✉ 発注メールを作成</h2>
     <p id="order-mail-maker" style="font-size:13px;color:#555;margin:0 0 4px;"></p>
-    <p style="font-size:12px;color:#888;margin:0 0 12px;">納品先を選ぶと、発注待ちの商品を入れたメール下書きが開きます。送信前に内容を確認してください。</p>
+    <p style="font-size:12px;color:#888;margin:0 0 8px;">納品先ごとに商品を分けて送りたい場合は、チェックを変えてから納品先を選んでください。送信前に内容を確認してください。</p>
+    <div id="order-mail-items"></div>
     <div id="order-mail-locations"></div>
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModal('modal-order-mail')" style="margin-bottom:0">閉じる</button>
@@ -1485,7 +1486,7 @@ function getPendingItemsForMaker(maker) {
       const m = (inv && inv.maker) ? inv.maker : '不明';
       if (m !== maker) return;
       const key = oi.name + '|' + (oi.color || '');
-      if (!agg[key]) agg[key] = { name: oi.name, color: oi.color || '', qty: 0, memo: inv ? (inv.memo || '') : '' };
+      if (!agg[key]) agg[key] = { key, name: oi.name, color: oi.color || '', qty: 0, memo: inv ? (inv.memo || '') : '' };
       agg[key].qty += (oi.qty || 1);
     });
   });
@@ -1493,22 +1494,48 @@ function getPendingItemsForMaker(maker) {
 }
 
 let currentMailMaker = '';
+let mailCheckedKeys = new Set();
 function openOrderMailPicker(maker) {
   if (!SUPPLIERS[maker]) return;
   currentMailMaker = maker;
   const sup = SUPPLIERS[maker];
   const its = getPendingItemsForMaker(maker);
+  mailCheckedKeys = new Set(its.map(it => it.key)); // 初期状態は全選択
   document.getElementById('order-mail-maker').textContent = `${maker} ${sup.contact}（${sup.email}）／ 発注待ち ${its.length} 品目`;
+  renderMailItemChecklist();
   document.getElementById('order-mail-locations').innerHTML = Object.keys(DELIVERY_LOCATIONS).map(k =>
     `<button class="store-select-btn" style="text-align:left;margin-bottom:8px;width:100%;" onclick="sendOrderMail('${escHtml(k)}')">📍 ${escHtml(k)}<br><span style="font-size:11px;opacity:0.7">${escHtml(DELIVERY_LOCATIONS[k]).replace(/\n/g, '<br>')}</span></button>`
   ).join('');
   openModal('modal-order-mail');
 }
 
+function renderMailItemChecklist() {
+  const its = getPendingItemsForMaker(currentMailMaker);
+  const el = document.getElementById('order-mail-items');
+  if (!its.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="font-size:11px;color:#888;margin:4px 0 6px;">送るメールに含める商品にチェック（講師が自分で運ぶ分などは外してください）</div>` +
+    its.map(it => `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#f8f8f5;border-radius:8px;margin-bottom:6px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" ${mailCheckedKeys.has(it.key) ? 'checked' : ''} onchange="toggleMailItem('${escHtml(it.key)}', this.checked)" style="width:auto;flex:none;">
+      <span>${it.memo ? escHtml(it.memo) + ' / ' : ''}${escHtml(it.name)}${it.color ? `（${escHtml(it.color)}）` : ''} × ${it.qty}</span>
+    </label>`).join('') +
+    `<div style="display:flex;gap:8px;margin:2px 0 14px;">
+      <button type="button" onclick="setAllMailItems(true)" style="flex:1;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:12px;padding:5px;cursor:pointer;">すべて選択</button>
+      <button type="button" onclick="setAllMailItems(false)" style="flex:1;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:12px;padding:5px;cursor:pointer;">すべて解除</button>
+    </div>`;
+}
+function toggleMailItem(key, checked) {
+  if (checked) mailCheckedKeys.add(key); else mailCheckedKeys.delete(key);
+}
+function setAllMailItems(checked) {
+  const its = getPendingItemsForMaker(currentMailMaker);
+  mailCheckedKeys = checked ? new Set(its.map(it => it.key)) : new Set();
+  renderMailItemChecklist();
+}
+
 function buildOrderMailUrl(maker, locKey) {
   const sup = SUPPLIERS[maker];
   if (!sup) return null;
-  const its = getPendingItemsForMaker(maker);
+  const its = getPendingItemsForMaker(maker).filter(it => mailCheckedKeys.has(it.key));
   const lines = its.length
     ? its.map(it => `・${it.memo ? it.memo + ' / ' : ''}${it.name}${it.color ? `（${it.color}）` : ''} × ${it.qty}`).join('\n')
     : '・（発注待ちの商品がありません）';
@@ -1525,6 +1552,7 @@ function buildOrderMailUrl(maker, locKey) {
 }
 
 function sendOrderMail(locKey) {
+  if (!mailCheckedKeys.size) { alert('メールに含める商品を1つ以上チェックしてください'); return; }
   const url = buildOrderMailUrl(currentMailMaker, locKey);
   if (url) { closeModal('modal-order-mail'); window.location.href = url; }
 }
