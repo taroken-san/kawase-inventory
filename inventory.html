@@ -1817,7 +1817,8 @@ function renderOrders() {
         ${adminMode && nextLabel && !showRouting ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
         ${adminMode && idx > 0 ? `<button class="btn btn-sm btn-edit" onclick="revertOrder('${o.id}')">← 戻す</button>` : ''}
         <button class="btn btn-sm btn-edit" onclick="openOrderModal('${o.id}')">編集</button>
-        ${adminMode ? `<button class="btn btn-sm btn-order-del" onclick="deleteOrder('${o.id}')">削除</button>` : ''}
+        ${adminMode ? `<button class="btn btn-sm btn-order-del" onclick="deleteOrder('${o.id}')">削除</button>`
+          : (o.status === '依頼受付' ? `<button class="btn btn-sm btn-order-del" onclick="cancelOrder('${o.id}')">取消</button>` : '')}
       </div>
     </div>`;
   }).join('');
@@ -1946,6 +1947,17 @@ function revertOrder(id) {
 function deleteOrder(id) {
   if (!confirm('削除しますか？')) return;
   orders = orders.filter(o => o.id !== id);
+  saveOrders();
+  renderOrders();
+}
+
+// 「依頼受付」段階（まだ発注先に発注していない）なら、講師も自分の入力ミスを取り消せる。
+// 発注済み以降は実際に手配が動いているため代表の「削除」のみ。
+function cancelOrder(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o || o.status !== '依頼受付') return;
+  if (!confirm('この発注依頼を取り消しますか？\n（まだ発注先には発注していない段階です）')) return;
+  orders = orders.filter(x => x.id !== id);
   saveOrders();
   renderOrders();
 }
