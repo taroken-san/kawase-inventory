@@ -35,6 +35,8 @@ header h1 { font-size: 17px; font-weight: 600; flex: 1; }
 .btn-out { background: #fff3e0; color: #e65100; }
 .btn-order { background: #ede7f6; color: #4527a0; }
 .btn-stockmove { background: #e6f1fb; color: #185fa5; }
+.btn-catalog-off { background: #f0f0e8; color: #333; }
+.btn-catalog-on { background: #1a1a1a; color: #fff; }
 .card { background: #fff; border-radius: 10px; border: 1px solid #e0e0d8; margin-bottom: 10px; overflow: hidden; }
 .card-header { padding: 11px 14px 0; display: flex; align-items: center; gap: 8px; }
 .item-thumb { width: 46px; height: 46px; border-radius: 7px; background: #f7f7f2; border: 1px solid #eee; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; color: #bbb; font-size: 10px; }
@@ -855,6 +857,7 @@ function renderInventory() {
                <button class="btn btn-sm btn-out" onclick="openMoveModal('${item.id}','out')">出庫</button>
                <button class="btn btn-sm btn-stockmove" onclick="openStockMoveModal('${item.id}')">🔁 移動</button>
                ${item.discontinued ? '' : `<button class="btn btn-sm btn-order" onclick="orderFromItem('${item.id}')">📦 発注</button>`}`}
+          <button class="btn btn-sm ${item.catalogVisible ? 'btn-catalog-on' : 'btn-catalog-off'}" onclick="toggleCatalogVisible('${item.id}')">${item.catalogVisible ? '📖 カタログ掲載中' : '📖 カタログに追加'}</button>
           <button class="btn btn-sm btn-edit" onclick="openEditModal('${item.id}')">編集</button>
           ${adminMode ? `<button class="btn btn-sm btn-delete" onclick="deleteItem('${item.id}')">削除</button>` : ''}
         </div>
@@ -1568,6 +1571,15 @@ function toggleCard(id) {
   const chev = document.getElementById('chev-' + id);
   const open = detail.classList.toggle('open');
   chev.style.transform = open ? 'rotate(180deg)' : '';
+}
+
+function toggleCatalogVisible(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item.catalogVisible = !item.catalogVisible;
+  save();
+  renderInventory();
+  renderCatalog();
 }
 
 // Firebase から初期データを読み込み、リアルタイム同期を開始
