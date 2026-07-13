@@ -133,7 +133,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .catalog-set { margin-top: 6px; font-size: 11px; color: #2d6a4f; line-height: 1.35; }
 .catalog-appeal { margin-top: 8px; font-size: 12px; line-height: 1.55; color: #333; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .catalog-stock { margin-top: 7px; font-size: 11px; color: #666; background: #f4f4ee; border-radius: 6px; padding: 5px 7px; }
-.featured-badge { position: absolute; top: 8px; left: 8px; background: #1a1a1a; color: #fff; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+.featured-badge { position: absolute; top: 8px; left: 8px; background: #1a1a1a; color: #fff; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.featured-badge-x { opacity: 0.7; margin-left: 2px; }
 .catalog-section { margin-bottom: 18px; }
 .catalog-section-title { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; color: #2d6a4f; border-left: 4px solid #2d6a4f; padding-left: 9px; margin: 0 0 10px; }
 .catalog-section-title.featured { color: #1a1a1a; border-left-color: #1a1a1a; }
@@ -192,6 +193,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   .catalog-price { font-size: 12pt; }
   .catalog-stock { display: none !important; }
   .featured-badge { font-size: 8pt; padding: 1.5mm 2.5mm; }
+  .featured-badge-x { display: none; }
 }
 </style>
 </head>
@@ -909,7 +911,7 @@ function renderCatalog() {
       ? `全店舗 ${totalQty(item)}個`
       : `${activeStore} ${storeQty(item, activeStore)}個`;
     return `<div class="catalog-card">
-      ${item.featured ? '<div class="featured-badge">おすすめ</div>' : ''}
+      ${item.featured ? `<div class="featured-badge" onclick="event.stopPropagation();toggleFeatured('${escHtml(item.id)}')" title="タップでおすすめ解除">おすすめ <span class="featured-badge-x">×</span></div>` : ''}
       <div class="catalog-image">
         ${item.imageUrl ? `<img src="${escHtml(item.imageUrl)}" alt="${escHtml(item.name)}" loading="lazy">` : '写真なし'}
       </div>
@@ -951,6 +953,14 @@ function renderCatalog() {
 
 function setCatalogCat(c) {
   activeCatalogCat = c;
+  renderCatalog();
+}
+
+function toggleFeatured(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item.featured = false;
+  save();
   renderCatalog();
 }
 
