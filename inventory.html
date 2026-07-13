@@ -302,8 +302,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <input type="text" id="item-name" placeholder="例：Famous FS-1G">
     <label>カテゴリ</label>
     <select id="item-category">
-      <option>ウクレレ</option><option>三線</option><option>弦</option>
-      <option>チューナー</option><option>ケース</option><option>ストラップ</option><option>アクセサリー</option><option>セット</option><option>貸出用</option><option>備品(消耗品)</option><option>その他</option>
+      <option>ウクレレ</option><option>ストラップ</option><option>ケース</option><option>チューナー</option>
+      <option>弦</option><option>アクセサリー</option><option>三線</option><option>貸出用</option><option>セット</option><option>備品(消耗品)</option><option>その他</option>
     </select>
     <label>メーカー</label>
     <input type="text" id="item-maker" placeholder="例：キワヤ商会">
@@ -537,6 +537,8 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 const STORES = ['横浜', '阪東橋', '町田', '平塚', '上大岡', '木曽', '青葉台', '長津田', '茅ヶ崎', '藤沢', '東戸塚'];
+const CATEGORY_ORDER = ['ウクレレ', 'ストラップ', 'ケース', 'チューナー', '弦', 'アクセサリー', '三線', '貸出用', 'セット', '備品(消耗品)', 'その他'];
+function categoryRank(c) { const i = CATEGORY_ORDER.indexOf(c); return i === -1 ? CATEGORY_ORDER.length : i; }
 // スタッフ名簿（入荷時にLINE Worksへ通知する宛先）。name=表示名, userId=LINE WorksユーザーID
 const STAFF = [
   { name: '川瀬健太郎', userId: '110001664374001' },
@@ -704,11 +706,12 @@ function renderInventory() {
     const matchStock = !inStockOnly || qty > 0;
     return matchQ && matchCat && matchStock;
   }).sort((a, b) => {
-    if (a.category !== b.category) return a.category.localeCompare(b.category, 'ja');
+    const ra = categoryRank(a.category), rb = categoryRank(b.category);
+    if (ra !== rb) return ra - rb;
     return a.name.localeCompare(b.name, 'ja');
   });
 
-  const cats = [...new Set(items.map(i => i.category))].filter(c => c !== '貸出用');
+  const cats = [...new Set(items.map(i => i.category))].filter(c => c !== '貸出用').sort((a, b) => categoryRank(a) - categoryRank(b));
   const filterBar = document.getElementById('filter-bar');
   const baseChips = ['all', ...cats].map(c => {
     const label = c === 'all' ? 'すべて' : c;
@@ -821,7 +824,7 @@ function renderCatalog() {
   if (!list || !filterBar) return;
   const showStock = document.getElementById('catalog-show-stock').checked;
   const catalogItems = items.filter(i => i.catalogVisible && !i.isLending);
-  const cats = [...new Set(catalogItems.map(i => i.category))];
+  const cats = [...new Set(catalogItems.map(i => i.category))].sort((a, b) => categoryRank(a) - categoryRank(b));
   filterBar.innerHTML = ['all', ...cats].map(c => {
     const label = c === 'all' ? 'すべて' : c;
     return `<div class="filter-chip ${activeCatalogCat === c ? 'active' : ''}" onclick="setCatalogCat('${c}')">${label}</div>`;
