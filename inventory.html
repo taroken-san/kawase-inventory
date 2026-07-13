@@ -153,16 +153,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .pattern-grid.dense .pattern-card-name, .pattern-grid.denser .pattern-card-name { font-size: 9.5px; }
 .pattern-card-price { font-size: 12px; font-weight: 800; color: #2d6a4f; }
 .pattern-grid.dense .pattern-card-price, .pattern-grid.denser .pattern-card-price { font-size: 10.5px; }
-.print-header { display: none; align-items: center; gap: 10mm; border-bottom: 1.5pt solid #2d6a4f; padding-bottom: 5mm; margin-bottom: 7mm; }
-.print-logo { width: 18mm; height: 18mm; object-fit: contain; }
-.print-title { font-size: 17pt; font-weight: 700; color: #1a1a1a; }
-.print-subtitle { font-size: 10pt; color: #666; margin-top: 1mm; }
+.print-header { display: none; align-items: center; gap: 6mm; background: #f6f2e7; border: 0.75pt solid #d9cba6; border-bottom: 2pt solid #b8935a; border-radius: 2mm; padding: 6mm 8mm; margin-bottom: 7mm; }
+.print-logo { width: 16mm; height: 16mm; object-fit: contain; background: #fff; border-radius: 50%; padding: 1.5mm; border: 0.5pt solid #d9cba6; }
+.print-title { font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', serif; font-size: 18pt; font-weight: 700; letter-spacing: 0.5pt; color: #1f4d3d; }
+.print-subtitle { font-size: 9.5pt; color: #8a7a52; margin-top: 1.5mm; letter-spacing: 0.3pt; }
 .print-footer { display: none; align-items: center; justify-content: center; gap: 4mm; border-top: 0.5pt solid #ccc; padding-top: 3mm; margin-top: 5mm; font-size: 8.5pt; color: #888; }
 .print-footer-logo { width: 7mm; height: 7mm; object-fit: contain; }
-.pattern-header { display: flex; align-items: center; gap: 8px; border-bottom: 1.5px solid #2d6a4f; padding-bottom: 6px; margin-bottom: 10px; }
-.pattern-header img { width: 28px; height: 28px; object-fit: contain; flex: none; }
-.pattern-header-title { font-size: 13px; font-weight: 700; }
-.pattern-header-sub { font-size: 11px; color: #666; }
+.pattern-header { display: flex; align-items: center; gap: 10px; background: #f6f2e7; border: 0.75px solid #d9cba6; border-bottom: 2px solid #b8935a; border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; }
+.pattern-header img { width: 26px; height: 26px; object-fit: contain; flex: none; background: #fff; border-radius: 50%; padding: 2px; border: 0.5px solid #d9cba6; }
+.pattern-header-title { font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', serif; font-size: 14px; font-weight: 700; letter-spacing: 0.3px; color: #1f4d3d; }
+.pattern-header-sub { font-size: 11px; color: #8a7a52; letter-spacing: 0.2px; }
 @media print {
   @page { size: A4; margin: 10mm; }
   body { background: #fff; color: #111; }
@@ -238,9 +238,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
 
 <div id="screen-catalog" class="screen">
   <div class="print-header">
-    <img class="print-logo" src="img/logo.png" alt="シニアスマイル音楽教室">
+    <img class="print-logo" src="img/logo.png" alt="S&Sシニアスマイル音楽教室">
     <div class="print-title-wrap">
-      <div class="print-title">シニアスマイル音楽教室　ウクレレカタログ</div>
+      <div class="print-title">S&Sシニアスマイル音楽教室　ウクレレカタログ</div>
       <div class="print-subtitle">ウクレレ・三線・アクセサリー</div>
     </div>
   </div>
@@ -261,7 +261,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: #1a1a1a
   <div id="pattern-print" style="display:none;"></div>
   <div class="print-footer">
     <img class="print-footer-logo" src="img/logo.png" alt="">
-    <span>シニアスマイル音楽教室　お問い合わせは各教室まで</span>
+    <span>S&Sシニアスマイル音楽教室　お問い合わせは各教室まで</span>
   </div>
 </div>
 
@@ -1046,7 +1046,7 @@ function renderPatternPrint() {
     <div class="pattern-header">
       <img src="img/logo.png" alt="">
       <div>
-        <div class="pattern-header-title">シニアスマイル音楽教室　ウクレレカタログ</div>
+        <div class="pattern-header-title">S&Sシニアスマイル音楽教室　ウクレレカタログ</div>
         <div class="pattern-header-sub">${escHtml(pattern.name)}</div>
       </div>
     </div>
@@ -1063,7 +1063,8 @@ function renderPatternPrint() {
     <div class="pattern-header">
       <img src="img/logo.png" alt="">
       <div>
-        <div class="pattern-header-title">アクセサリー・ケース・ストラップなど</div>
+        <div class="pattern-header-title">S&Sシニアスマイル音楽教室</div>
+        <div class="pattern-header-sub">アクセサリー・ケース・ストラップなど</div>
       </div>
     </div>
     <div class="${gridClass}">${accessories.map(patternCardHtml).join('')}</div>
