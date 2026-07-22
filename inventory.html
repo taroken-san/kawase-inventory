@@ -1657,7 +1657,7 @@ db.ref('/').once('value').then(snap => {
 // ---- 発注管理 ----
 const ORDER_STATUSES = ['依頼受付', '発注済み', '入荷済み', '渡し済み'];
 let orders = [];
-let activeOrderStatus = 'all';
+let activeOrderStatus = 'active'; // 既定は「対応中」（渡し済みを除く）。「すべて」は明示的に選んだ時だけ。
 let activeOrderMaker = 'all';        // まとめ発注ダッシュボードの発注先フィルタ
 let supplierThresholds = {};         // 発注先ごとの送料無料ライン（定価ベース） { maker: 金額 }
 
@@ -1759,12 +1759,19 @@ function getPendingItemsForMaker(maker) {
 
 let currentMailMaker = '';
 let mailCheckedKeys = new Set();
-function openOrderMailPicker(maker) {
+function openOrderMailPicker(maker, onlyOrderId) {
   if (!SUPPLIERS[maker]) return;
   currentMailMaker = maker;
   const sup = SUPPLIERS[maker];
   const its = getPendingItemsForMaker(maker);
-  mailCheckedKeys = new Set(its.map(it => it.key)); // 初期状態は全選択
+  if (onlyOrderId) {
+    // 特定の発注カードから開いた場合は、その依頼の商品だけ初期チェック（他は追加で足せる）
+    const order = orders.find(o => o.id === onlyOrderId);
+    const orderKeys = new Set((order ? (order.orderItems || []) : []).map(oi => oi.name + '|' + (oi.color || '')));
+    mailCheckedKeys = new Set(its.filter(it => orderKeys.has(it.key)).map(it => it.key));
+  } else {
+    mailCheckedKeys = new Set(its.map(it => it.key)); // 初期状態は全選択
+  }
   document.getElementById('order-mail-maker').textContent = `${maker} ${sup.contact}（${sup.email}）／ 発注待ち ${its.length} 品目`;
   renderMailItemChecklist();
   document.getElementById('order-mail-locations').innerHTML = Object.keys(DELIVERY_LOCATIONS).map(k =>
@@ -2009,13 +2016,16 @@ function renderOrders() {
 
   const filtered = activeOrderStatus === 'all'
     ? byMaker
-    : byMaker.filter(o => o.status === activeOrderStatus);
+    : activeOrderStatus === 'active'
+      ? byMaker.filter(o => o.status !== '渡し済み')
+      : byMaker.filter(o => o.status === activeOrderStatus);
 
   const bar = document.getElementById('order-filter-bar');
   const counts = {};
   ORDER_STATUSES.forEach(s => { counts[s] = byStore.filter(o => o.status === s).length; });
-  bar.innerHTML = [['all', 'すべて'], ...ORDER_STATUSES.map(s => [s, s])].map(([val, label]) => {
-    const cnt = val === 'all' ? byStore.length : counts[val];
+  const activeCount = byStore.filter(o => o.status !== '渡し済み').length;
+  bar.innerHTML = [['active', '対応中'], ['all', 'すべて'], ...ORDER_STATUSES.map(s => [s, s])].map(([val, label]) => {
+    const cnt = val === 'all' ? byStore.length : val === 'active' ? activeCount : counts[val];
     return `<div class="filter-chip ${activeOrderStatus === val ? 'active' : ''}" onclick="setOrderStatus('${val}')">${label}${cnt > 0 ? ' ' + cnt : ''}</div>`;
   }).join('');
 
@@ -2080,6 +2090,9 @@ function renderOrders() {
       <div class="order-actions">
         ${adminMode && nextLabel && !showRouting ? `<button class="btn btn-sm btn-next" onclick="advanceOrder('${o.id}')">${nextLabel}</button>` : ''}
         ${adminMode && idx > 0 ? `<button class="btn btn-sm btn-edit" onclick="revertOrder('${o.id}')">← 戻す</button>` : ''}
+        ${showRouting ? orderMakers(o).filter(m => SUPPLIERS[m]).map(m =>
+          `<button class="btn btn-sm" style="border:1px solid #185fa5;background:#fff;color:#185fa5;" onclick="openOrderMailPicker('${escHtml(m)}','${o.id}')">✉ 発注メール</button>`
+        ).join('') : ''}
         <button class="btn btn-sm btn-edit" onclick="openOrderModal('${o.id}')">編集</button>
         ${adminMode ? `<button class="btn btn-sm btn-order-del" onclick="deleteOrder('${o.id}')">削除</button>`
           : (o.status === '依頼受付' ? `<button class="btn btn-sm btn-order-del" onclick="cancelOrder('${o.id}')">取消</button>` : '')}
