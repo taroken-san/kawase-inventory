@@ -2118,6 +2118,8 @@ function advanceOrder(id) {
     confirmMsg = `受け取り完了にしますか？\n${o.fromStore || '元店舗'} → ${o.store || '受取店舗'} に在庫を移動します。`;
   } else if (next === '入荷済み' && !o.noOrder) {
     confirmMsg = `「入荷済み」にしますか？\n${o.store || '受取店舗'} に在庫を追加し、依頼講師に通知します。`;
+  } else if (next === '渡し済み' && !o.noOrder) {
+    confirmMsg = `講師へのお渡し済みにしますか？\n${o.store || '受取店舗'} の在庫を減らします。`;
   } else {
     confirmMsg = `「${next}」に進めますか？`;
   }
@@ -2178,6 +2180,20 @@ function advanceOrder(id) {
     }
   }
 
+  // 講師へお渡し完了 → 入荷済みで足した分を在庫から差し引く（作業のみ・取り寄せは対象外）
+  if (next === '渡し済み' && !o.noOrder) {
+    const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
+    const store = o.store || '不明';
+    orderItems.forEach(oi => {
+      const item = items.find(i => i.name === oi.name);
+      if (item) {
+        item.locations[store] = Math.max(0, (item.locations[store] || 0) - oi.qty);
+        history.push({ id: item.id, name: item.name, type: 'out', qty: oi.qty, store, memo: '講師へお渡し', ts: Date.now() });
+      }
+    });
+    save();
+  }
+
   o.status = next;
   saveOrders();
   renderOrders();
@@ -2214,6 +2230,20 @@ function revertOrder(id) {
   if (o.type === 'transfer' && prev === '依頼受付') {
     o.type = 'order';
     delete o.fromStore;
+  }
+
+  // お渡し済みを戻す → 講師へのお渡しで引いた分を在庫に戻す
+  if (prev === '入荷済み' && o.status === '渡し済み' && !o.noOrder) {
+    const orderItems = o.orderItems || [{ name: o.itemName, qty: o.qty }];
+    const store = o.store || '不明';
+    orderItems.forEach(oi => {
+      const item = items.find(i => i.name === oi.name);
+      if (item) {
+        item.locations[store] = (item.locations[store] || 0) + oi.qty;
+        history.push({ id: item.id, name: item.name, type: 'in', qty: oi.qty, store, memo: 'お渡し取消（戻し）', ts: Date.now() });
+      }
+    });
+    save();
   }
 
   o.status = prev;
